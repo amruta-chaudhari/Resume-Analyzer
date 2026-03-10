@@ -139,8 +139,17 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-router.post('/logout', authMiddleware, async (_req: AuthRequest, res) => {
-  res.json({ success: true, message: 'Logged out' });
+router.post('/logout', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    await authService.revokeAllRefreshSessions(req.userId);
+    res.json({ success: true, message: 'Logged out' });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Logout failed' });
+  }
 });
 
 export default router;

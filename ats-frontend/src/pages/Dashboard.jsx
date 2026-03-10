@@ -11,7 +11,7 @@ import useTheme from '../hooks/useTheme';
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
-  const { clearAuth, hasHydrated } = useAuthStore();
+  const { clearAuth, updateUser, hasHydrated } = useAuthStore();
   const location = useLocation();
 
   // Model Parameters state
@@ -57,7 +57,10 @@ const Dashboard = () => {
 
     const loadUser = async () => {
       try {
-        await authService.getCurrentUser();
+        const userResponse = await authService.getCurrentUser();
+        if (userResponse?.user) {
+          updateUser(userResponse.user);
+        }
         // User is authenticated, continue to dashboard
       } catch (error) {
         clearAuth();
@@ -69,7 +72,7 @@ const Dashboard = () => {
     };
 
     loadUser();
-  }, [clearAuth, hasHydrated]);
+  }, [clearAuth, hasHydrated, updateUser]);
 
   // Check backend connection
   useEffect(() => {

@@ -183,6 +183,7 @@ VITE_API_URL=http://localhost:3001
 | POST | `/api/auth/login` | Login |
 | POST | `/api/auth/refresh` | Refresh access token |
 | GET | `/api/auth/me` | Get current user |
+| POST | `/api/auth/logout` | Revoke user refresh sessions |
 
 ### Resume Analysis
 | Method | Endpoint | Description |

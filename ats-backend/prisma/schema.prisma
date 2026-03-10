@@ -53,6 +53,7 @@ model User {
   jobDescriptions       JobDescription[]
   analyses              Analysis[]
   aiUsage               AiUsage[]
+  refreshSessions       RefreshSession[]
   subscription          Subscription?
   auditLogs             AuditLog[]
 
@@ -285,6 +286,23 @@ model AiUsage {
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ai_usage")
+}
+
+model RefreshSession {
+  id                    String    @id @default(uuid()) @map("_id")
+  userId                String
+  tokenHash             String    @unique
+  expiresAt             DateTime
+  revokedAt             DateTime?
+  replacedBySessionId   String?
+  createdAt             DateTime  @default(now())
+  lastUsedAt            DateTime?
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_sessions")
 }
 
 model Subscription {

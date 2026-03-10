@@ -5,6 +5,7 @@ import LoadingSpinner from './LoadingSpinner';
 
 const ProtectedRoute = ({ children }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasSessionToken = useAuthStore((state) => Boolean(state.accessToken || state.refreshToken));
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
   if (!hasHydrated) {
@@ -15,7 +16,7 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !hasSessionToken) {
     return <Navigate to="/login" replace />;
   }
 
