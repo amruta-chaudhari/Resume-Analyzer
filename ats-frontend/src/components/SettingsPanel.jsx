@@ -23,6 +23,8 @@ const SettingsPanel = ({
         onClick={() => setIsOpen(!isOpen)}
         className="fixed top-12 right-6 z-40 p-3 glass rounded-full transition-all duration-200 hover:scale-105 group"
         aria-label="Open settings"
+        aria-expanded={isOpen}
+        aria-controls="settings-panel"
       >
         <svg 
           className={`w-6 h-6 text-gray-600 dark:text-gray-300 transition-transform duration-200 ${isOpen ? 'rotate-45' : 'group-hover:rotate-12'}`} 
@@ -44,7 +46,7 @@ const SettingsPanel = ({
           />
           
           {/* Settings Panel */}
-          <div className="fixed top-12 right-4 sm:right-20 w-80 max-w-[calc(100vw-2rem)] z-40 slide-up">
+          <div id="settings-panel" className="fixed top-12 right-4 sm:right-20 w-80 max-w-[calc(100vw-2rem)] z-40 slide-up">
             <div className="glass-strong rounded-3xl p-6 border border-white/25 shadow-2xl">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
@@ -60,6 +62,7 @@ const SettingsPanel = ({
                 <button
                   onClick={() => setIsOpen(false)}
                   className="glass p-2 rounded-full hover:bg-red-100/20 dark:hover:bg-red-900/20 transition-colors duration-200"
+                  aria-label="Close settings"
                 >
                   <svg className="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -87,6 +90,8 @@ const SettingsPanel = ({
                           ? 'bg-blue-600' 
                           : 'bg-gray-300 dark:bg-gray-600'
                       }`}
+                      aria-label="Toggle AI model selection"
+                      aria-pressed={showModelSelector}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -132,6 +137,8 @@ const SettingsPanel = ({
                           ? 'bg-purple-600' 
                           : 'bg-gray-300 dark:bg-gray-600'
                       }`}
+                      aria-label="Toggle theme"
+                      aria-pressed={theme === 'dark'}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${

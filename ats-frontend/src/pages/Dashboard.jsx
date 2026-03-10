@@ -11,7 +11,7 @@ import useTheme from '../hooks/useTheme';
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
-  const { clearAuth } = useAuthStore();
+  const { clearAuth, hasHydrated } = useAuthStore();
   const location = useLocation();
 
   // Model Parameters state
@@ -51,26 +51,32 @@ const Dashboard = () => {
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
     const loadUser = async () => {
       try {
         await authService.getCurrentUser();
         // User is authenticated, continue to dashboard
       } catch (error) {
-        console.error('Failed to load user:', error);
+        clearAuth();
+        window.location.href = '/login';
+        return;
       } finally {
         setLoading(false);
       }
     };
 
     loadUser();
-  }, []);
+  }, [clearAuth, hasHydrated]);
 
   // Check backend connection
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        await testConnection();
-        setConnectionStatus('connected');
+        const result = await testConnection();
+        setConnectionStatus(result.success ? 'connected' : 'error');
       } catch (error) {
         console.error('Connection check failed:', error);
         setConnectionStatus('error');

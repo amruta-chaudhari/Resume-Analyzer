@@ -273,7 +273,16 @@ export class ResumeService {
     };
   }
 
-  async updateResume(resumeId: string, userId: string, data: any) {
+  async updateResume(
+    resumeId: string,
+    userId: string,
+    data: {
+      title?: string;
+      content?: string;
+      templateId?: string | null;
+      structuredData?: string | Record<string, any> | null;
+    }
+  ) {
     // Verify ownership
     const existing = await prisma.resume.findFirst({
       where: { id: resumeId, userId, deletedAt: null },
@@ -294,14 +303,43 @@ export class ResumeService {
       },
     });
 
+    const updateData: Record<string, any> = {
+      version: { increment: 1 },
+      updatedAt: new Date(),
+    };
+
+    if (typeof data.title === 'string') {
+      updateData.title = data.title.trim();
+    }
+
+    if (typeof data.content === 'string') {
+      updateData.content = data.content;
+      updateData.extractedText = data.content;
+    }
+
+    if (data.templateId === null || typeof data.templateId === 'string') {
+      updateData.templateId = data.templateId;
+    }
+
+    if (data.structuredData !== undefined) {
+      if (data.structuredData === null) {
+        updateData.structuredData = null;
+      } else if (typeof data.structuredData === 'string') {
+        updateData.structuredData = data.structuredData;
+      } else {
+        updateData.structuredData = JSON.stringify(data.structuredData);
+      }
+
+      if (!updateData.extractedText && updateData.structuredData) {
+        const parsed = safeJsonParse<Record<string, any> | null>(updateData.structuredData, null);
+        updateData.extractedText = parsed ? this.extractTextFromStructuredData(parsed) : existing.extractedText;
+      }
+    }
+
     // Update resume
     const updated = await prisma.resume.update({
       where: { id: resumeId },
-      data: {
-        ...data,
-        version: { increment: 1 },
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
     return updated;

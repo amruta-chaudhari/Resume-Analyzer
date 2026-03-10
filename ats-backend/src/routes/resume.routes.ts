@@ -25,6 +25,57 @@ const parseModelParameters = (body: any) => {
   };
 };
 
+const normalizeResumeUpdatePayload = (body: any) => {
+  const allowedKeys = ['title', 'content', 'templateId', 'structuredData'];
+  const incomingKeys = Object.keys(body || {});
+  const invalidKeys = incomingKeys.filter((key) => !allowedKeys.includes(key));
+
+  if (invalidKeys.length > 0) {
+    throw new Error(`Unsupported fields: ${invalidKeys.join(', ')}`);
+  }
+
+  const normalized: {
+    title?: string;
+    content?: string;
+    templateId?: string | null;
+    structuredData?: string | Record<string, any> | null;
+  } = {};
+
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 200) {
+      throw new Error('Title must be a non-empty string up to 200 characters');
+    }
+    normalized.title = body.title.trim();
+  }
+
+  if (body.content !== undefined) {
+    if (typeof body.content !== 'string' || body.content.trim().length === 0) {
+      throw new Error('Content must be a non-empty string');
+    }
+    normalized.content = body.content;
+  }
+
+  if (body.templateId !== undefined) {
+    if (body.templateId !== null && typeof body.templateId !== 'string') {
+      throw new Error('Template ID must be a string or null');
+    }
+    normalized.templateId = body.templateId;
+  }
+
+  if (body.structuredData !== undefined) {
+    if (body.structuredData !== null && typeof body.structuredData !== 'string' && typeof body.structuredData !== 'object') {
+      throw new Error('Structured data must be an object, JSON string, or null');
+    }
+    normalized.structuredData = body.structuredData;
+  }
+
+  if (Object.keys(normalized).length === 0) {
+    throw new Error('No valid fields to update');
+  }
+
+  return normalized;
+};
+
 // Initialize services
 const fileStorage = new FileStorageService();
 const resumeFileService = new ResumeFileService(fileStorage);
@@ -140,13 +191,19 @@ router.get('/:id', async (req: AuthRequest, res) => {
 
 const updateResumeHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const normalizedPayload = normalizeResumeUpdatePayload(req.body);
+
     const resume = await resumeService.updateResume(
       req.params.id,
       req.userId!,
-      req.body
+      normalizedPayload
     );
     res.json({ success: true, data: { resume } });
   } catch (error: any) {
+    if (error.message?.startsWith('Unsupported fields:') || error.message === 'No valid fields to update' || error.message?.includes('must be')) {
+      return res.status(400).json({ error: error.message });
+    }
+
     if (error.message === 'Resume not found') {
       return res.status(404).json({ error: error.message });
     }

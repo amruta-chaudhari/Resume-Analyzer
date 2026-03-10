@@ -18,6 +18,8 @@ const isAuthRequest = (url = '') => (
   url.includes('/api/auth/refresh')
 );
 
+let refreshPromise = null;
+
 // Request interceptor - add token
 apiClient.interceptors.request.use(
   (config) => {
@@ -60,9 +62,13 @@ apiClient.interceptors.response.use(
           throw new Error('Missing refresh token');
         }
 
-        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
-          refreshToken,
-        });
+        if (!refreshPromise) {
+          refreshPromise = axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+            refreshToken,
+          });
+        }
+
+        const response = await refreshPromise;
 
         const { tokens } = response.data.data;
         useAuthStore.getState().setAuth(
@@ -84,6 +90,8 @@ apiClient.interceptors.response.use(
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);
+      } finally {
+        refreshPromise = null;
       }
     }
 
@@ -465,23 +473,16 @@ export const getTemplateById = async (templateId) => {
 
 // Test API connection
 export const testConnection = async () => {
-  try {
-    const startTime = Date.now();
-    const health = await checkHealth();
-    const responseTime = Date.now() - startTime;
-    
-    return {
-      success: true,
-      responseTime,
-      serverTime: health.timestamp,
-      modelCache: health.modelCache
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error.message
-    };
-  }
+  const startTime = Date.now();
+  const health = await checkHealth();
+  const responseTime = Date.now() - startTime;
+
+  return {
+    success: true,
+    responseTime,
+    serverTime: health.timestamp,
+    modelCache: health.modelCache,
+  };
 };
 
 // Utility function to validate file before upload
