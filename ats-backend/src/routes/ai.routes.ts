@@ -38,6 +38,108 @@ const serverError = (res: Response, error: string) => {
   });
 };
 
+type JobDescriptionPayload = {
+  title?: string;
+  company?: string | null;
+  location?: string | null;
+  description?: string;
+  sourceUrl?: string | null;
+};
+
+const normalizeJobDescriptionPayload = (body: any, requireCoreFields: boolean): JobDescriptionPayload => {
+  const normalized: JobDescriptionPayload = {};
+
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string') {
+      throw new Error('Title must be a string');
+    }
+
+    const title = body.title.trim();
+    if (title.length < 2 || title.length > 200) {
+      throw new Error('Title must be between 2 and 200 characters');
+    }
+    normalized.title = title;
+  }
+
+  if (body.description !== undefined) {
+    if (typeof body.description !== 'string') {
+      throw new Error('Description must be a string');
+    }
+
+    const description = body.description.trim();
+    if (description.length < 30 || description.length > 20000) {
+      throw new Error('Description must be between 30 and 20000 characters');
+    }
+    normalized.description = description;
+  }
+
+  if (body.company !== undefined) {
+    if (body.company === null) {
+      normalized.company = null;
+    } else if (typeof body.company === 'string') {
+      const company = body.company.trim();
+      if (company.length > 200) {
+        throw new Error('Company must be 200 characters or fewer');
+      }
+      normalized.company = company || null;
+    } else {
+      throw new Error('Company must be a string or null');
+    }
+  }
+
+  if (body.location !== undefined) {
+    if (body.location === null) {
+      normalized.location = null;
+    } else if (typeof body.location === 'string') {
+      const location = body.location.trim();
+      if (location.length > 200) {
+        throw new Error('Location must be 200 characters or fewer');
+      }
+      normalized.location = location || null;
+    } else {
+      throw new Error('Location must be a string or null');
+    }
+  }
+
+  if (body.sourceUrl !== undefined) {
+    if (body.sourceUrl === null) {
+      normalized.sourceUrl = null;
+    } else if (typeof body.sourceUrl === 'string') {
+      const sourceUrl = body.sourceUrl.trim();
+      if (!sourceUrl) {
+        normalized.sourceUrl = null;
+      } else {
+        if (sourceUrl.length > 2048) {
+          throw new Error('Source URL must be 2048 characters or fewer');
+        }
+
+        try {
+          const parsed = new URL(sourceUrl);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('Source URL must use HTTP or HTTPS');
+          }
+        } catch {
+          throw new Error('Source URL must be a valid URL');
+        }
+
+        normalized.sourceUrl = sourceUrl;
+      }
+    } else {
+      throw new Error('Source URL must be a string or null');
+    }
+  }
+
+  if (requireCoreFields) {
+    if (!normalized.title || !normalized.description) {
+      throw new Error('Title and description are required');
+    }
+  } else if (Object.keys(normalized).length === 0) {
+    throw new Error('At least one field is required to update');
+  }
+
+  return normalized;
+};
+
 // Initialize services
 const fileStorage = new FileStorageService();
 const resumeFileService = new ResumeFileService(fileStorage);
@@ -433,23 +535,16 @@ router.post('/job-descriptions', authMiddleware, async (req: AuthRequest, res) =
             });
         }
 
-        const { title, company, location, description, sourceUrl } = req.body;
-
-        if (!title || !description) {
-            return res.status(400).json({
-                success: false,
-                error: 'Title and description are required'
-            });
-        }
+        const payload = normalizeJobDescriptionPayload(req.body, true);
 
         const jobDescription = await prisma.jobDescription.create({
             data: {
                 userId: req.userId,
-                title,
-                company,
-                location,
-                description,
-                sourceUrl
+                title: payload.title!,
+                company: payload.company,
+                location: payload.location,
+                description: payload.description!,
+                sourceUrl: payload.sourceUrl
             }
         });
 
@@ -457,7 +552,14 @@ router.post('/job-descriptions', authMiddleware, async (req: AuthRequest, res) =
             success: true,
             data: jobDescription
         });
-    } catch (_error: any) {
+    } catch (error: any) {
+        if (error.message?.includes('must') || error.message?.includes('required') || error.message?.includes('between') || error.message?.includes('valid')) {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        }
+
         serverError(res, 'Failed to create job description');
     }
 });
@@ -472,7 +574,7 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
             });
         }
 
-        const { title, company, location, description, sourceUrl } = req.body;
+        const payload = normalizeJobDescriptionPayload(req.body, false);
 
         const jobDescription = await prisma.jobDescription.findFirst({
             where: {
@@ -492,12 +594,7 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
         const updatedJobDescription = await prisma.jobDescription.update({
             where: { id: req.params.id },
             data: {
-                title,
-                company,
-                location,
-                description,
-                sourceUrl,
-                updatedAt: new Date()
+                ...payload,
             }
         });
 
@@ -505,7 +602,14 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
             success: true,
             data: updatedJobDescription
         });
-    } catch (_error: any) {
+    } catch (error: any) {
+        if (error.message?.includes('must') || error.message?.includes('required') || error.message?.includes('between') || error.message?.includes('valid') || error.message?.includes('At least one field')) {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        }
+
         serverError(res, 'Failed to update job description');
     }
 });

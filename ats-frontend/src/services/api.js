@@ -284,6 +284,31 @@ export const analyzeStoredResume = async (
   }
 };
 
+const normalizeJobDescriptionPayload = (jobData = {}) => {
+  const normalizeNullableString = (value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  };
+
+  return {
+    title: typeof jobData.title === 'string' ? jobData.title.trim() : jobData.title,
+    description: typeof jobData.description === 'string' ? jobData.description.trim() : jobData.description,
+    company: normalizeNullableString(jobData.company),
+    location: normalizeNullableString(jobData.location),
+    sourceUrl: normalizeNullableString(jobData.sourceUrl),
+  };
+};
+
 // Job description operations
 export const getJobDescriptions = async () => {
   try {
@@ -297,7 +322,8 @@ export const getJobDescriptions = async () => {
 
 export const createJobDescription = async (jobData) => {
   try {
-    const response = await apiClient.post('/api/job-descriptions', jobData);
+    const payload = normalizeJobDescriptionPayload(jobData);
+    const response = await apiClient.post('/api/job-descriptions', payload);
     return response.data.data;
   } catch (error) {
     console.error('Failed to create job description:', error);
@@ -307,7 +333,8 @@ export const createJobDescription = async (jobData) => {
 
 export const updateJobDescription = async (jobId, updates) => {
   try {
-    const response = await apiClient.put(`/api/job-descriptions/${jobId}`, updates);
+    const payload = normalizeJobDescriptionPayload(updates);
+    const response = await apiClient.put(`/api/job-descriptions/${jobId}`, payload);
     return response.data.data;
   } catch (error) {
     console.error('Failed to update job description:', error);
