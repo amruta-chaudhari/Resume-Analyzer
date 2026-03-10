@@ -5,7 +5,6 @@ import mammoth from 'mammoth';
 import { AIService } from '../services/ai.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { FileStorageService } from '../services/file-storage.service';
-import { ResumeFileService } from '../services/resume-file.service';
 import prisma from '../lib/prisma';
 import { safeJsonParse } from '../lib/json';
 
@@ -142,7 +141,6 @@ const normalizeJobDescriptionPayload = (body: any, requireCoreFields: boolean): 
 
 // Initialize services
 const fileStorage = new FileStorageService();
-const resumeFileService = new ResumeFileService(fileStorage);
 
 // Initialize file storage
 fileStorage.initialize().catch(console.error);
@@ -276,8 +274,8 @@ router.post('/analyze', authMiddleware, upload.single('resume'), async (req: Aut
         // Analyze with AI
         const analysisResult = await aiService.analyzeResume(text, jobDescription, selectedModel, modelParameters);
 
-        // Process and save the file
-        const fileData = await resumeFileService.processResumeFile(req.file, req.userId!);
+        // Save original file after successful analysis
+        const fileMetadata = await fileStorage.saveFile(req.file, req.userId!);
 
         // Save to database in a transaction
         const savedData = await prisma.$transaction(async (tx) => {
@@ -313,12 +311,12 @@ router.post('/analyze', authMiddleware, upload.single('resume'), async (req: Aut
                 data: {
                     userId: req.userId!,
                     title: `Resume for ${jobTitle}`,
-                    structuredData: fileData.structuredData ? JSON.stringify(fileData.structuredData) : null,
-                    extractedText: fileData.processedContent.text,
-                    originalFileId: fileData.originalFile.id,
-                    originalFileName: fileData.originalFile.originalName,
-                    originalFileSize: fileData.originalFile.size,
-                    originalFileType: fileData.originalFile.mimeType,
+                    structuredData: null,
+                    extractedText: text,
+                    originalFileId: fileMetadata.id,
+                    originalFileName: fileMetadata.originalName,
+                    originalFileSize: fileMetadata.size,
+                    originalFileType: fileMetadata.mimeType,
                     fileProcessedAt: new Date(),
                     status: 'analyzed'
                 }

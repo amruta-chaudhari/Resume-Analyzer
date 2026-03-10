@@ -10,6 +10,12 @@ import path from 'path';
 
 dotenv.config();
 
+const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+const missingEnvVars = requiredEnvVars.filter((name) => !process.env[name]);
+if (missingEnvVars.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
