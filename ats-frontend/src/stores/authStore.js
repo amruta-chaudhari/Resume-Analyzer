@@ -8,6 +8,7 @@ const useAuthStore = create(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      hasHydrated: false,
 
       setAuth: (user, accessToken, refreshToken) => {
         set({
@@ -16,9 +17,6 @@ const useAuthStore = create(
           refreshToken: refreshToken,
           isAuthenticated: true,
         });
-        
-        console.log('State set called');
-        
       },
 
       clearAuth: () => {
@@ -31,7 +29,11 @@ const useAuthStore = create(
       },
 
       updateUser: (userData) => {
-        set({ user: { ...get().user, ...userData } });
+        set({ user: { ...(get().user || {}), ...userData } });
+      },
+
+      setHasHydrated: (hasHydrated) => {
+        set({ hasHydrated });
       },
     }),
     {
@@ -42,6 +44,9 @@ const useAuthStore = create(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

@@ -81,6 +81,7 @@ const Dashboard = () => {
   }, []);
 
   const handleLogout = () => {
+    authService.logout().catch(() => {});
     clearAuth();
     window.location.href = '/login';
   };

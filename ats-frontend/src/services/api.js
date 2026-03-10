@@ -12,6 +12,12 @@ const apiClient = axios.create({
   }
 });
 
+const isAuthRequest = (url = '') => (
+  url.includes('/api/auth/login') ||
+  url.includes('/api/auth/register') ||
+  url.includes('/api/auth/refresh')
+);
+
 // Request interceptor - add token
 apiClient.interceptors.request.use(
   (config) => {
@@ -38,19 +44,23 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config || {};
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // Don't try to refresh token for login requests
-      if (originalRequest.url?.includes('/api/auth/login')) {
+      if (isAuthRequest(originalRequest.url)) {
         return Promise.reject(error);
       }
 
       try {
         const refreshToken = useAuthStore.getState().refreshToken;
-        const response = await apiClient.post('/api/auth/refresh', {
+
+        if (!refreshToken) {
+          throw new Error('Missing refresh token');
+        }
+
+        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
           refreshToken,
         });
 
@@ -61,7 +71,11 @@ apiClient.interceptors.response.use(
           tokens.refreshToken
         );
 
-        originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          Authorization: `Bearer ${tokens.accessToken}`,
+        };
+
         return apiClient(originalRequest);
       } catch (refreshError) {
         useAuthStore.getState().clearAuth();
@@ -84,13 +98,17 @@ apiClient.interceptors.response.use(
       // Server responded with error status
       const status = error.response.status;
       const data = error.response.data;
+      const requestUrl = error.config?.url || '';
 
       // Handle specific error codes with user-friendly messages
       switch (status) {
         case 400:
           throw new Error(data?.error || 'Invalid request. Please check your input.');
         case 401:
-          throw new Error('Invalid email or password. Please try again.');
+          if (requestUrl.includes('/api/auth/login')) {
+            throw new Error('Invalid email or password. Please try again.');
+          }
+          throw new Error(data?.error || 'Authentication required. Please sign in again.');
         case 403:
           throw new Error('You don\'t have permission to access this resource.');
         case 404:
@@ -197,6 +215,64 @@ export const getAnalysisById = async (analysisId) => {
   } catch (error) {
     console.error('Failed to fetch analysis:', error);
     throw new Error(`Failed to load analysis: ${error.message}`);
+  }
+};
+
+export const parseResumeText = async (text) => {
+  try {
+    const response = await apiClient.post('/api/resumes/parse', { text });
+    return response.data.data;
+  } catch (error) {
+    throw new Error(`Failed to parse resume text: ${error.message}`);
+  }
+};
+
+export const generateResumePreview = async (content, templateId = null) => {
+  try {
+    const response = await apiClient.post('/api/resumes/preview', {
+      content,
+      templateId,
+    });
+
+    return response.data;
+  } catch (error) {
+    throw new Error(`Failed to generate resume preview: ${error.message}`);
+  }
+};
+
+export const exportResume = async (resumeId, format = 'pdf') => {
+  const normalizedFormat = ['pdf', 'word'].includes(format) ? format : 'pdf';
+
+  try {
+    const response = await apiClient.get(`/api/resumes/${resumeId}/export/${normalizedFormat}`, {
+      responseType: 'blob',
+    });
+
+    return response.data;
+  } catch (error) {
+    throw new Error(`Failed to export resume: ${error.message}`);
+  }
+};
+
+export const analyzeStoredResume = async (
+  resumeId,
+  jobDescription,
+  selectedModel = null,
+  modelParameters = {},
+  jobTitle = null
+) => {
+  try {
+    const payload = {
+      jobDescription,
+      selectedModel,
+      jobTitle,
+      ...modelParameters,
+    };
+
+    const response = await apiClient.post(`/api/resumes/${resumeId}/analyze`, payload);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(`Failed to analyze resume: ${error.message}`);
   }
 };
 
@@ -448,4 +524,3 @@ export const formatModelName = (modelId) => {
 
 // Export the axios instance as default for auth service
 export default apiClient;
-

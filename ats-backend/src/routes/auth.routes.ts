@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { AuthService } from '../services/auth.service';
 import { AuthRequest, authMiddleware } from '../middleware/auth.middleware';
+import prisma from '../lib/prisma';
 
 const router = Router();
 const authService = new AuthService();
@@ -39,7 +40,7 @@ router.post('/register', [
       },
     });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Registration failed' });
   }
 });
 
@@ -74,7 +75,7 @@ router.post('/login', [
       },
     });
   } catch (error: any) {
-    res.status(401).json({ error: error.message });
+    res.status(401).json({ error: 'Invalid credentials' });
   }
 });
 
@@ -102,7 +103,7 @@ router.post('/refresh', [
       },
     });
   } catch (error: any) {
-    res.status(401).json({ error: error.message });
+    res.status(401).json({ error: 'Invalid refresh token' });
   }
 });
 
@@ -111,10 +112,6 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     if (!req.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-
-    // Get user from database
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
 
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
@@ -140,6 +137,10 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   } catch (error: any) {
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+router.post('/logout', authMiddleware, async (_req: AuthRequest, res) => {
+  res.json({ success: true, message: 'Logged out' });
 });
 
 export default router;

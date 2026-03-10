@@ -37,18 +37,23 @@ const Login = () => {
         </h1>
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
+          <div
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+            <label htmlFor="login-email" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
               Email
             </label>
             <input
               type="email"
+              id="login-email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
@@ -59,11 +64,12 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+            <label htmlFor="login-password" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
               Password
             </label>
             <input
               type="password"
+              id="login-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"

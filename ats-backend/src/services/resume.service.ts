@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { FileStorageService } from './file-storage.service';
 import { ResumeFileService, ResumeFileData } from './resume-file.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
+import { safeJsonParse } from '../lib/json';
 
 export class ResumeService {
   private fileStorage?: FileStorageService;
@@ -158,7 +157,10 @@ export class ResumeService {
         select: {
           id: true,
           title: true,
+          content: true,
+          extractedText: true,
           status: true,
+          templateId: true,
           createdAt: true,
           updatedAt: true,
           originalFileId: true,
@@ -207,20 +209,16 @@ export class ResumeService {
     });
 
     // Parse structured data if it exists
-    let structuredData = null;
-    if ((resume as any).structuredData) {
-      try {
-        structuredData = JSON.parse((resume as any).structuredData);
-      } catch (error) {
-        console.error('Error parsing structured data:', error);
-      }
-    }
+    const structuredData = safeJsonParse<Record<string, any> | null>(
+      (resume as any).structuredData,
+      null
+    );
 
     return {
       ...resume,
       structuredData,
       // For backward compatibility, provide content field
-      content: resume.content || resume.extractedText || this.extractTextFromStructuredData(structuredData),
+      content: resume.content || resume.extractedText || (structuredData ? this.extractTextFromStructuredData(structuredData) : ''),
     };
   }
 
@@ -337,12 +335,10 @@ export class ResumeService {
     // Parse resume content for structured data
     let structuredContent: any;
     if (typeof resume.content === 'string') {
-      try {
-        structuredContent = JSON.parse(resume.content);
-        console.log('Successfully parsed resume content as JSON');
-      } catch (parseError) {
-        console.log('Failed to parse resume content as JSON, treating as plain text:', parseError);
-        // If not JSON, create basic structure
+      const parsedContent = safeJsonParse<Record<string, any> | null>(resume.content, null);
+      if (parsedContent) {
+        structuredContent = parsedContent;
+      } else {
         structuredContent = {
           personalInfo: { fullName: 'Your Name' },
           summary: resume.content,
@@ -363,12 +359,8 @@ export class ResumeService {
       };
     }
 
-    console.log('Structured content keys:', Object.keys(structuredContent));
-
     // Generate HTML from structured content
     const html = this.generateFormattedHTML(structuredContent, resume.template);
-    console.log('Generated HTML length:', html.length);
-    console.log('HTML preview:', html.substring(0, 500) + '...');
 
     // Convert HTML to PDF using puppeteer
     const puppeteer = require('puppeteer');
@@ -398,7 +390,6 @@ export class ResumeService {
         deviceScaleFactor: 1
       });
 
-      console.log('Setting HTML content...');
       await page.setContent(html, {
         waitUntil: 'domcontentloaded',
         timeout: 10000
@@ -407,7 +398,6 @@ export class ResumeService {
       // Wait for fonts and styles to load
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      console.log('Generating PDF...');
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: false,
@@ -420,32 +410,12 @@ export class ResumeService {
         timeout: 30000
       });
 
-      console.log('Generated PDF buffer length:', pdfBuffer.length);
-
-      if (!pdfBuffer || pdfBuffer.length === 0) {
-        throw new Error('Generated PDF is empty');
-      }
-
-      console.log('Generated PDF buffer length:', pdfBuffer.length);
-
-      if (!pdfBuffer || pdfBuffer.length === 0) {
-        throw new Error('Generated PDF is empty');
-      }
-
-      // Basic validation - check if buffer looks like a PDF
-      const header = pdfBuffer.subarray(0, 4).toString();
-      console.log('PDF header (first 4 bytes):', header, 'bytes:', Array.from(pdfBuffer.subarray(0, 4)));
-
-      console.log('PDF generation successful, returning buffer');
-      return pdfBuffer;
-
       if (!pdfBuffer || pdfBuffer.length === 0) {
         throw new Error('Generated PDF is empty');
       }
 
       return pdfBuffer;
     } catch (error) {
-      console.error('PDF generation error:', error);
       throw new Error(`Failed to generate PDF: ${(error as any).message}`);
     } finally {
       if (browser) {
@@ -468,14 +438,18 @@ export class ResumeService {
       // Get structured data - prefer structuredData field, fallback to content
       let structuredResume;
       if ((resume as any).structuredData) {
-        structuredResume = JSON.parse((resume as any).structuredData);
+        structuredResume = safeJsonParse<Record<string, any> | null>((resume as any).structuredData, null);
       } else if (resume.content) {
-        structuredResume = JSON.parse(resume.content);
+        structuredResume = safeJsonParse<Record<string, any> | null>(resume.content, null);
       } else {
         throw new Error('Resume has no structured data');
       }
 
-      const { personalInfo, summary, experience, education, skills, certifications, projects } = structuredResume;
+      if (!structuredResume) {
+        throw new Error('Resume structured data is invalid');
+      }
+
+      const { personalInfo, summary, experience, education, skills } = structuredResume;
 
       const { Document, Packer, Paragraph, TextRun, AlignmentType } = require('docx');
 
@@ -668,11 +642,8 @@ export class ResumeService {
         }]
       });
 
-      const buffer = await Packer.toBuffer(doc);
-      console.log('Word document generated successfully, buffer length:', buffer.length);
-      return buffer;
+      return await Packer.toBuffer(doc);
     } catch (error: any) {
-      console.error('Error generating Word document:', error);
       throw new Error(`Failed to generate Word document: ${error.message}`);
     }
   }
@@ -715,16 +686,21 @@ export class ResumeService {
       });
 
       const responseContent = completion.choices[0].message.content;
-      console.log('AI Response:', responseContent); // Debug log
+
+      if (!responseContent) {
+        throw new Error('AI response was empty');
+      }
 
       // Clean the response - remove any markdown formatting
       const cleanedContent = responseContent.replace(/```json\s*|\s*```/g, '').trim();
 
-      const parsedContent = JSON.parse(cleanedContent);
+      const parsedContent = safeJsonParse<Record<string, any> | null>(cleanedContent, null);
+      if (!parsedContent) {
+        throw new Error('Failed to parse structured response from AI');
+      }
+
       return parsedContent;
     } catch (error: any) {
-      console.error('AI parsing error:', error);
-      console.error('Error details:', error.response?.data || error.message);
       throw new Error('Failed to parse resume with AI');
     }
   }

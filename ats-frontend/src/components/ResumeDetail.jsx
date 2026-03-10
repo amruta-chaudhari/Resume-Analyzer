@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { analyzeResume, downloadResumeFile } from '../services/api';
-import useAuthStore from '../stores/authStore';
+import { analyzeStoredResume, downloadResumeFile, exportResume } from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
 import AnalysisResults from './AnalysisResults';
@@ -22,11 +21,7 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
       setAnalyzing(true);
       setError('');
 
-      // Create a File object from the resume content for analysis
-      const resumeFile = new File([initialResume.content], initialResume.originalFileName || `${initialResume.title}.txt`, { type: 'application/octet-stream' }); 
-
-
-      const result = await analyzeResume(resumeFile, jobDescription);
+      const result = await analyzeStoredResume(initialResume.id, jobDescription);
       setAnalysisResult(result);
       setShowAnalysis(true);
     } catch (err) {
@@ -38,19 +33,7 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
 
   const handleExport = async (format) => {
     try {
-      const token = useAuthStore.getState().accessToken;
-      const response = await fetch(`http://localhost:3001/api/resumes/${initialResume.id}/export/${format}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to export as ${format.toUpperCase()}`);
-      }
-
-      const blob = await response.blob();
+      const blob = await exportResume(initialResume.id, format);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -222,7 +205,7 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
               >
                 {analyzing ? (
                   <div className="flex items-center">
-                    <LoadingSpinner />
+                    <LoadingSpinner label="" />
                     <span className="ml-3">Analyzing Resume...</span>
                   </div>
                 ) : (

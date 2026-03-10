@@ -1,18 +1,35 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { ResumeService } from '../services/resume.service';
 import { FileStorageService } from '../services/file-storage.service';
 import { ResumeFileService } from '../services/resume-file.service';
-import { PrismaClient } from '@prisma/client';
+import { AIService } from '../services/ai.service';
+import prisma from '../lib/prisma';
+import { safeJsonParse } from '../lib/json';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+const parseModelParameters = (body: any) => {
+  const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
+  const maxTokensParam = Number.parseInt(String(body.max_tokens ?? ''), 10);
+
+  return {
+    temperature: Number.isFinite(temperatureParam)
+      ? Math.min(Math.max(temperatureParam, 0), 2)
+      : undefined,
+    max_tokens: Number.isFinite(maxTokensParam)
+      ? Math.min(Math.max(maxTokensParam, 500), 16000)
+      : undefined,
+    include_reasoning: body.include_reasoning === 'true' || body.include_reasoning === true,
+  };
+};
 
 // Initialize services
 const fileStorage = new FileStorageService();
 const resumeFileService = new ResumeFileService(fileStorage);
 const resumeService = new ResumeService(fileStorage, resumeFileService);
+const aiService = new AIService();
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -21,7 +38,7 @@ const upload = multer({
   limits: {
     fileSize: fileStorage.getMaxFileSize(),
   },
-  fileFilter: (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     if (fileStorage.getAllowedTypes().includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -40,16 +57,21 @@ router.use(authMiddleware);
 router.get('/', async (req: AuthRequest, res) => {
   try {
     const { page, limit, status } = req.query;
+    const pageParam = Number.parseInt(page as string, 10);
+    const limitParam = Number.parseInt(limit as string, 10);
+    const normalizedPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+    const normalizedLimit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 10;
+
     const result = await resumeService.getResumes(
       req.userId!,
-      Number(page) || 1,
-      Number(limit) || 10,
+      normalizedPage,
+      normalizedLimit,
       status as string
     );
 
     res.json({ success: true, data: result });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to fetch resumes' });
   }
 });
 
@@ -57,7 +79,6 @@ router.get('/', async (req: AuthRequest, res) => {
 router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   try {
     const { title, content, templateId, structuredData } = req.body;
-    console.log('Resume creation request:', { title, hasFile: !!req.file, hasContent: !!content, userId: req.userId });
 
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -66,12 +87,6 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
     let resume;
 
     if (req.file) {
-      console.log('Processing file upload:', { filename: req.file.originalname, size: req.file.size, mimetype: req.file.mimetype });
-      // File upload
-      if (!req.file) {
-        return res.status(400).json({ error: 'File upload failed' });
-      }
-
       resume = await resumeService.createResumeFromFile(
         req.userId!,
         title,
@@ -80,10 +95,8 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
       );
     } else if (structuredData) {
       // Structured data (JSON)
-      let parsedData;
-      try {
-        parsedData = JSON.parse(structuredData);
-      } catch (error) {
+      const parsedData = safeJsonParse<any>(structuredData, null);
+      if (!parsedData) {
         return res.status(400).json({ error: 'Invalid structured data format' });
       }
 
@@ -106,9 +119,8 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
     }
 
     res.status(201).json({ success: true, data: { resume } });
-  } catch (error: any) {
-    console.error('Resume creation error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to create resume' });
   }
 });
 
@@ -118,12 +130,15 @@ router.get('/:id', async (req: AuthRequest, res) => {
     const resume = await resumeService.getResumeById(req.params.id, req.userId!);
     res.json({ success: true, data: { resume } });
   } catch (error: any) {
-    res.status(404).json({ error: error.message });
+    if (error.message === 'Resume not found') {
+      return res.status(404).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: 'Failed to fetch resume' });
   }
 });
 
-// PATCH /api/resumes/:id
-router.patch('/:id', async (req: AuthRequest, res) => {
+const updateResumeHandler = async (req: AuthRequest, res: Response) => {
   try {
     const resume = await resumeService.updateResume(
       req.params.id,
@@ -132,9 +147,19 @@ router.patch('/:id', async (req: AuthRequest, res) => {
     );
     res.json({ success: true, data: { resume } });
   } catch (error: any) {
-    res.status(404).json({ error: error.message });
+    if (error.message === 'Resume not found') {
+      return res.status(404).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: 'Failed to update resume' });
   }
-});
+};
+
+// PATCH /api/resumes/:id
+router.patch('/:id', updateResumeHandler);
+
+// PUT /api/resumes/:id
+router.put('/:id', updateResumeHandler);
 
 // DELETE /api/resumes/:id
 router.delete('/:id', async (req: AuthRequest, res) => {
@@ -142,7 +167,11 @@ router.delete('/:id', async (req: AuthRequest, res) => {
     await resumeService.deleteResume(req.params.id, req.userId!);
     res.status(204).send();
   } catch (error: any) {
-    res.status(404).json({ error: error.message });
+    if (error.message === 'Resume not found') {
+      return res.status(404).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: 'Failed to delete resume' });
   }
 });
 
@@ -165,9 +194,8 @@ router.get('/:id/file', async (req: AuthRequest, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${metadata.originalName}"`);
     res.setHeader('Content-Length', metadata.size);
     res.send(fileBuffer);
-  } catch (error: any) {
-    console.error('File download error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to download file' });
   }
 });
 
@@ -181,9 +209,8 @@ router.get('/:id/file/metadata', async (req: AuthRequest, res) => {
     }
 
     res.json({ success: true, data: metadata });
-  } catch (error: any) {
-    console.error('File metadata error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to load file metadata' });
   }
 });
 
@@ -191,8 +218,6 @@ router.get('/:id/file/metadata', async (req: AuthRequest, res) => {
 router.get('/:id/export/pdf', async (req: AuthRequest, res) => {
   try {
     const pdfBuffer = await resumeService.exportToPDF(req.params.id, req.userId!);
-
-    console.log('Sending PDF buffer, length:', pdfBuffer.length);
 
     // Set headers for binary response
     res.setHeader('Content-Type', 'application/pdf');
@@ -204,9 +229,8 @@ router.get('/:id/export/pdf', async (req: AuthRequest, res) => {
 
     // Send the buffer directly without any transformation
     res.status(200).end(pdfBuffer);
-  } catch (error: any) {
-    console.error('PDF export error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to export PDF' });
   }
 });
 
@@ -218,8 +242,8 @@ router.get('/:id/export/word', async (req: AuthRequest, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="resume-${req.params.id}.docx"`);
     res.send(wordBuffer);
-  } catch (error: any) {
-    res.status(404).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to export Word document' });
   }
 });
 
@@ -228,14 +252,114 @@ router.post('/parse', async (req: AuthRequest, res) => {
   try {
     const { text } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ error: 'Resume text is required' });
+    if (!text || typeof text !== 'string' || text.trim().length < 30) {
+      return res.status(400).json({ error: 'Resume text must be at least 30 characters' });
     }
 
-    const parsedResume = await resumeService.parseResumeWithAI(text, req.userId!);
+    const parsedResume = await resumeService.parseResumeWithAI(text.trim(), req.userId!);
     res.json({ success: true, data: parsedResume });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to parse resume' });
+  }
+});
+
+// POST /api/resumes/:id/analyze
+router.post('/:id/analyze', async (req: AuthRequest, res) => {
+  try {
+    const { jobDescription, jobTitle, selectedModel } = req.body;
+
+    if (!jobDescription || typeof jobDescription !== 'string' || jobDescription.trim().length < 30) {
+      return res.status(400).json({ error: 'Job description must be at least 30 characters' });
+    }
+
+    const resume = await prisma.resume.findFirst({
+      where: { id: req.params.id, userId: req.userId!, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        extractedText: true,
+        content: true,
+      },
+    });
+
+    if (!resume) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    const resumeText = (resume.extractedText || resume.content || '').trim();
+    if (resumeText.length < 50) {
+      return res.status(400).json({ error: 'Resume content is too short to analyze' });
+    }
+
+    const modelParameters = parseModelParameters(req.body);
+
+    const normalizedJobTitle = typeof jobTitle === 'string' && jobTitle.trim().length > 0
+      ? jobTitle.trim()
+      : 'Untitled Job';
+
+    const analysisResult = await aiService.analyzeResume(
+      resumeText,
+      jobDescription.trim(),
+      selectedModel,
+      modelParameters
+    );
+
+    const savedData = await prisma.$transaction(async (tx) => {
+      let jobDesc = await tx.jobDescription.findFirst({
+        where: {
+          userId: req.userId!,
+          title: normalizedJobTitle,
+        },
+      });
+
+      if (!jobDesc) {
+        jobDesc = await tx.jobDescription.create({
+          data: {
+            userId: req.userId!,
+            title: normalizedJobTitle,
+            description: jobDescription.trim(),
+          },
+        });
+      } else {
+        jobDesc = await tx.jobDescription.update({
+          where: { id: jobDesc.id },
+          data: {
+            description: jobDescription.trim(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      const analysis = await tx.analysis.create({
+        data: {
+          userId: req.userId!,
+          resumeId: resume.id,
+          jobDescriptionId: jobDesc.id,
+          analysisType: 'ats_analysis',
+          aiProvider: analysisResult.modelUsed?.provider || 'unknown',
+          modelUsed: analysisResult.modelUsed?.id || selectedModel || 'unknown',
+          results: JSON.stringify(analysisResult),
+          status: 'completed',
+          completedAt: new Date(),
+          processingTimeMs: analysisResult.processingTime || null,
+          tokensUsed: analysisResult.tokensUsed || null,
+        },
+      });
+
+      return { jobDesc, analysis };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...analysisResult,
+        savedAnalysisId: savedData.analysis.id,
+        savedResumeId: resume.id,
+        savedJobDescriptionId: savedData.jobDesc.id,
+      },
+    });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to analyze resume' });
   }
 });
 
@@ -252,17 +376,15 @@ router.get('/:id/preview', async (req: AuthRequest, res) => {
     }
 
     // Try to parse content as JSON, fallback to plain text
-    let structuredContent;
-    try {
-      structuredContent = typeof resume.content === 'string' ? JSON.parse(resume.content) : resume.content;
-    } catch {
-      structuredContent = { text: resume.content };
-    }
+    const structuredContent = typeof resume.content === 'string'
+      ? safeJsonParse<Record<string, any> | null>(resume.content, { text: resume.content })
+      : resume.content;
 
-    const html = resumeService.generateFormattedHTML(structuredContent, resume.template);
+    const safeContent = structuredContent ?? { text: resume.content ?? '' };
+    const html = resumeService.generateFormattedHTML(safeContent, resume.template);
     res.send(html);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to generate preview' });
   }
 });
 
@@ -271,6 +393,10 @@ router.post('/preview', async (req: AuthRequest, res) => {
   try {
     const { content, templateId } = req.body;
 
+    if (!content || typeof content !== 'object') {
+      return res.status(400).json({ error: 'Preview content is required' });
+    }
+
     // Find template if specified
     const template = templateId ? await prisma.template.findUnique({
       where: { id: templateId },
@@ -278,8 +404,8 @@ router.post('/preview', async (req: AuthRequest, res) => {
 
     const html = resumeService.generateFormattedHTML(content, template);
     res.send(html);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+  } catch (_error: any) {
+    res.status(500).json({ error: 'Failed to generate preview' });
   }
 });
 

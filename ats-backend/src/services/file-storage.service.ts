@@ -63,14 +63,12 @@ export class FileStorageService {
   }
 
   async saveFile(file: Express.Multer.File, userId: string): Promise<FileMetadata> {
-    console.log('Saving file for user:', userId);
     if (!userId) {
       throw new Error('User ID is required');
     }
     
     const validation = this.validateFile(file);
     if (!validation.valid) {
-      console.error('File validation failed:', validation.error);
       throw new Error(validation.error);
     }
 
@@ -79,19 +77,15 @@ export class FileStorageService {
     const filename = `${fileId}.${extension}`;
     const userDir = path.join(this.config.uploadDir, userId);
 
-    console.log('Creating user directory:', userDir);
     // Ensure user directory exists
     await fs.mkdir(userDir, { recursive: true });
 
     const filePath = path.join(userDir, filename);
 
-    console.log('Saving file to:', filePath);
     // Save file to disk
     try {
       await fs.writeFile(filePath, file.buffer);
-      console.log('File saved successfully');
     } catch (error) {
-      console.error('Failed to save file:', error);
       throw new Error(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 

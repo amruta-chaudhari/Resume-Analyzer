@@ -159,6 +159,9 @@ OPENAI_API_KEY=your-openrouter-api-key
 BASE_URL=https://openrouter.ai/api/v1
 ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free
 
+# Comma-separated allowed frontend origins
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
 # Server
 PORT=3001
 ```
@@ -196,6 +199,7 @@ VITE_API_URL=http://localhost:3001
 | GET | `/api/resumes/:id` | Get resume details |
 | PATCH | `/api/resumes/:id` | Update resume |
 | DELETE | `/api/resumes/:id` | Delete resume |
+| POST | `/api/resumes/:id/analyze` | Analyze saved resume |
 | GET | `/api/resumes/:id/file` | Download original file |
 | GET | `/api/resumes/:id/export/pdf` | Export as PDF |
 | GET | `/api/resumes/:id/export/word` | Export as Word |

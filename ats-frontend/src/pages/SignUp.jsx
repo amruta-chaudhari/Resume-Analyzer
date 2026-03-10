@@ -67,7 +67,11 @@ const SignUp = () => {
         </h1>
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
+          <div
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-4"
+            role="alert"
+            aria-live="polite"
+          >
             {error}
           </div>
         )}
@@ -75,11 +79,12 @@ const SignUp = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+              <label htmlFor="signup-first-name" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
                 First Name
               </label>
               <input
                 type="text"
+                id="signup-first-name"
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
@@ -89,11 +94,12 @@ const SignUp = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+              <label htmlFor="signup-last-name" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
                 Last Name
               </label>
               <input
                 type="text"
+                id="signup-last-name"
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
@@ -105,11 +111,12 @@ const SignUp = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+            <label htmlFor="signup-email" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
               Email
             </label>
             <input
               type="email"
+              id="signup-email"
               name="email"
               value={formData.email}
               onChange={handleChange}
@@ -120,11 +127,12 @@ const SignUp = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+            <label htmlFor="signup-password" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
               Password
             </label>
             <input
               type="password"
+              id="signup-password"
               name="password"
               value={formData.password}
               onChange={handleChange}
@@ -135,11 +143,12 @@ const SignUp = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
+            <label htmlFor="signup-confirm-password" className="block text-sm font-medium text-gray-800 dark:text-gray-300 mb-2">
               Confirm Password
             </label>
             <input
               type="password"
+              id="signup-confirm-password"
               name="confirmPassword"
               value={formData.confirmPassword}
               onChange={handleChange}

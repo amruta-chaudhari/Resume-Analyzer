@@ -157,7 +157,7 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
         >
           {isLoading ? (
             <div className="flex items-center justify-center">
-              <LoadingSpinner />
+              <LoadingSpinner label="" />
             </div>
           ) : (
             <div className="flex items-center justify-center space-x-3">

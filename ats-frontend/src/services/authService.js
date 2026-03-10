@@ -36,8 +36,7 @@ export const authService = {
   },
 
   async logout() {
-    // Optional: call backend logout endpoint
-    // await apiClient.post('/api/auth/logout');
+    await apiClient.post('/api/auth/logout');
   },
 
   async getCurrentUser() {

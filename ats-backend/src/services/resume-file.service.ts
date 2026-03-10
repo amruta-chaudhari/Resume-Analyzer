@@ -23,10 +23,8 @@ export class ResumeFileService {
   constructor(private fileStorage: FileStorageService) {}
 
   async processResumeFile(file: Express.Multer.File, userId: string): Promise<ResumeFileData> {
-    console.log('Processing resume file:', { userId, filename: file.originalname, size: file.size });
     // Save the original file
     const fileMetadata = await this.fileStorage.saveFile(file, userId);
-    console.log('File saved with metadata:', fileMetadata);
 
     // Extract text based on file type
     const processedContent = await this.extractTextFromFile(file, fileMetadata);

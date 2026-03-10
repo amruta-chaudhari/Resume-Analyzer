@@ -1,4 +1,4 @@
-import { Router, Request } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
@@ -6,11 +6,18 @@ import { AIService } from '../services/ai.service';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { FileStorageService } from '../services/file-storage.service';
 import { ResumeFileService } from '../services/resume-file.service';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma';
+import { safeJsonParse } from '../lib/json';
 
 const router = Router();
 const aiService = new AIService();
-const prisma = new PrismaClient();
+
+const serverError = (res: Response, error: string) => {
+  res.status(500).json({
+    success: false,
+    error,
+  });
+};
 
 // Initialize services
 const fileStorage = new FileStorageService();
@@ -44,13 +51,8 @@ router.get('/models', async (req, res) => {
             success: true,
             data: models
         });
-    } catch (error: any) {
-        console.error('Models fetch error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch models',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to fetch models');
     }
 });
 
@@ -63,13 +65,8 @@ router.post('/models/refresh', async (req, res) => {
             data: models,
             message: 'Model cache refreshed'
         });
-    } catch (error: any) {
-        console.error('Models refresh error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to refresh models',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to refresh models');
     }
 });
 
@@ -90,21 +87,33 @@ router.post('/analyze', authMiddleware, upload.single('resume'), async (req: Aut
             });
         }
 
-        const jobDescription = req.body.jobDescription;
-        const jobTitle = req.body.jobTitle || 'Untitled Job';
-        const selectedModel = req.body.selectedModel;
+        const jobDescription = typeof req.body.jobDescription === 'string'
+            ? req.body.jobDescription.trim()
+            : '';
+        const jobTitle = typeof req.body.jobTitle === 'string' && req.body.jobTitle.trim().length > 0
+            ? req.body.jobTitle.trim()
+            : 'Untitled Job';
+        const selectedModel = typeof req.body.selectedModel === 'string' ? req.body.selectedModel : undefined;
 
-        // Extract model parameters from request body (simplified)
+        const temperatureParam = Number.parseFloat(String(req.body.temperature ?? ''));
+        const maxTokensParam = Number.parseInt(String(req.body.max_tokens ?? ''), 10);
+        const temperature = Number.isFinite(temperatureParam)
+            ? Math.min(Math.max(temperatureParam, 0), 2)
+            : undefined;
+        const maxTokens = Number.isFinite(maxTokensParam)
+            ? Math.min(Math.max(maxTokensParam, 500), 16000)
+            : undefined;
+
         const modelParameters = {
-            temperature: req.body.temperature ? parseFloat(req.body.temperature) : undefined,
-            max_tokens: req.body.max_tokens ? parseInt(req.body.max_tokens) : undefined,
+            temperature,
+            max_tokens: maxTokens,
             include_reasoning: req.body.include_reasoning === 'true' || req.body.include_reasoning === true
         };
 
-        if (!jobDescription) {
+        if (!jobDescription || jobDescription.length < 30) {
             return res.status(400).json({
                 success: false,
-                error: 'Job description is required'
+                error: 'Job description must be at least 30 characters'
             });
         }
 
@@ -124,12 +133,10 @@ router.post('/analyze', authMiddleware, upload.single('resume'), async (req: Aut
                     error: 'Unsupported file type'
                 });
             }
-        } catch (error: any) {
-            console.error('File parsing error:', error);
+        } catch (_error: any) {
             return res.status(400).json({
                 success: false,
-                error: 'Failed to parse file',
-                details: error.message
+                error: 'Failed to parse file'
             });
         }
 
@@ -221,13 +228,8 @@ router.post('/analyze', authMiddleware, upload.single('resume'), async (req: Aut
             }
         });
 
-    } catch (error: any) {
-        console.error('Analysis error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Analysis failed',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Analysis failed');
     }
 });
 
@@ -241,8 +243,10 @@ router.get('/analyses', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 10;
+        const pageParam = parseInt(req.query.page as string, 10);
+        const limitParam = parseInt(req.query.limit as string, 10);
+        const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+        const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 10;
         const offset = (page - 1) * limit;
 
         const [analyses, totalCount] = await Promise.all([
@@ -267,7 +271,7 @@ router.get('/analyses', authMiddleware, async (req: AuthRequest, res) => {
 
         // Parse the results JSON for each analysis
         const formattedAnalyses = analyses.map(analysis => {
-            const parsedResults = analysis.results ? JSON.parse(analysis.results) : null;
+            const parsedResults = safeJsonParse<Record<string, any> | null>(analysis.results, null);
             return {
                 id: analysis.id,
                 analysisType: analysis.analysisType,
@@ -298,13 +302,8 @@ router.get('/analyses', authMiddleware, async (req: AuthRequest, res) => {
                 }
             }
         });
-    } catch (error: any) {
-        console.error('Get analyses error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch analyses',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to fetch analyses');
     }
 });
 
@@ -347,7 +346,7 @@ router.get('/analyses/:id', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
-        const parsedResults = analysis.results ? JSON.parse(analysis.results) : null;
+        const parsedResults = safeJsonParse<Record<string, any> | null>(analysis.results, null);
 
         res.json({
             success: true,
@@ -368,13 +367,8 @@ router.get('/analyses/:id', authMiddleware, async (req: AuthRequest, res) => {
                 ...parsedResults
             }
         });
-    } catch (error: any) {
-        console.error('Get analysis error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch analysis',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to fetch analysis');
     }
 });
 
@@ -400,13 +394,8 @@ router.get('/job-descriptions', authMiddleware, async (req: AuthRequest, res) =>
             success: true,
             data: jobDescriptions
         });
-    } catch (error: any) {
-        console.error('Get job descriptions error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch job descriptions',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to fetch job descriptions');
     }
 });
 
@@ -444,13 +433,8 @@ router.post('/job-descriptions', authMiddleware, async (req: AuthRequest, res) =
             success: true,
             data: jobDescription
         });
-    } catch (error: any) {
-        console.error('Create job description error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create job description',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to create job description');
     }
 });
 
@@ -497,13 +481,8 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
             success: true,
             data: updatedJobDescription
         });
-    } catch (error: any) {
-        console.error('Update job description error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update job description',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to update job description');
     }
 });
 
@@ -541,184 +520,8 @@ router.delete('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, 
             success: true,
             message: 'Job description deleted successfully'
         });
-    } catch (error: any) {
-        console.error('Delete job description error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to delete job description',
-            details: error.message
-        });
-    }
-});
-
-// GET /api/resumes - Get user's resumes
-router.get('/resumes', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        if (!req.userId) {
-            return res.status(401).json({
-                success: false,
-                error: 'Authentication required'
-            });
-        }
-
-        const resumes = await prisma.resume.findMany({
-            where: { 
-                userId: req.userId,
-                deletedAt: null
-            },
-            include: {
-                _count: {
-                    select: { analyses: true }
-                }
-            },
-            orderBy: { updatedAt: 'desc' }
-        });
-
-        res.json({
-            success: true,
-            data: resumes
-        });
-    } catch (error: any) {
-        console.error('Get resumes error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch resumes',
-            details: error.message
-        });
-    }
-});
-
-// GET /api/resumes/:id - Get specific resume
-router.get('/resumes/:id', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        if (!req.userId) {
-            return res.status(401).json({
-                success: false,
-                error: 'Authentication required'
-            });
-        }
-
-        const resume = await prisma.resume.findFirst({
-            where: {
-                id: req.params.id,
-                userId: req.userId,
-                deletedAt: null
-            }
-        });
-
-        if (!resume) {
-            return res.status(404).json({
-                success: false,
-                error: 'Resume not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: resume
-        });
-    } catch (error: any) {
-        console.error('Get resume error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch resume',
-            details: error.message
-        });
-    }
-});
-
-// PUT /api/resumes/:id - Update resume
-router.put('/resumes/:id', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        if (!req.userId) {
-            return res.status(401).json({
-                success: false,
-                error: 'Authentication required'
-            });
-        }
-
-        const { title, content } = req.body;
-
-        const resume = await prisma.resume.findFirst({
-            where: {
-                id: req.params.id,
-                userId: req.userId,
-                deletedAt: null
-            }
-        });
-
-        if (!resume) {
-            return res.status(404).json({
-                success: false,
-                error: 'Resume not found'
-            });
-        }
-
-        const updatedResume = await prisma.resume.update({
-            where: { id: req.params.id },
-            data: {
-                title,
-                content,
-                extractedText: content,
-                updatedAt: new Date()
-            }
-        });
-
-        res.json({
-            success: true,
-            data: updatedResume
-        });
-    } catch (error: any) {
-        console.error('Update resume error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update resume',
-            details: error.message
-        });
-    }
-});
-
-// DELETE /api/resumes/:id - Delete resume
-router.delete('/resumes/:id', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        if (!req.userId) {
-            return res.status(401).json({
-                success: false,
-                error: 'Authentication required'
-            });
-        }
-
-        const resume = await prisma.resume.findFirst({
-            where: {
-                id: req.params.id,
-                userId: req.userId,
-                deletedAt: null
-            }
-        });
-
-        if (!resume) {
-            return res.status(404).json({
-                success: false,
-                error: 'Resume not found'
-            });
-        }
-
-        await prisma.resume.update({
-            where: { id: req.params.id },
-            data: { deletedAt: new Date() }
-        });
-
-        res.json({
-            success: true,
-            message: 'Resume deleted successfully'
-        });
-    } catch (error: any) {
-        console.error('Delete resume error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to delete resume',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Failed to delete job description');
     }
 });
 
@@ -730,12 +533,8 @@ router.get('/health', async (req, res) => {
             success: true,
             data: health
         });
-    } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            error: 'Health check failed',
-            details: error.message
-        });
+    } catch (_error: any) {
+        serverError(res, 'Health check failed');
     }
 });
 

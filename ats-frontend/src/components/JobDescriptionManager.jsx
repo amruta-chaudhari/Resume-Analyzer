@@ -109,7 +109,7 @@ const JobDescriptionManager = () => {
   if (loading && (!Array.isArray(jobDescriptions) || jobDescriptions.length === 0)) {
     return (
       <div className="flex items-center justify-center py-12">
-        <LoadingSpinner />
+        <LoadingSpinner label="Loading job descriptions..." />
       </div>
     );
   }

@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { createResume, updateResume, createResumeFromFile } from '../services/api';
+import {
+  createResume,
+  updateResume,
+  createResumeFromFile,
+  parseResumeText,
+  generateResumePreview,
+  validateFile,
+} from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
-import useAuthStore from '../stores/authStore';
 
 const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
   const [formData, setFormData] = useState({
@@ -81,23 +87,10 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
       setLoading(true);
       setError('');
 
-      const response = await fetch('http://localhost:3001/api/resumes/parse', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${useAuthStore.getState().accessToken}`,
-        },
-        body: JSON.stringify({ text: formData.content }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to parse resume with AI');
-      }
-
-      const result = await response.json();
+      const result = await parseResumeText(formData.content);
       setFormData(prev => ({
         ...prev,
-        content: JSON.stringify(result.data, null, 2),
+        content: JSON.stringify(result, null, 2),
       }));
     } catch (err) {
       setError(`AI parsing failed: ${err.message}`);
@@ -131,24 +124,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
         };
       }
 
-      // Generate preview HTML
-      const response = await fetch('http://localhost:3001/api/resumes/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${useAuthStore.getState().accessToken}`,
-        },
-        body: JSON.stringify({
-          content: structuredContent,
-          templateId: formData.templateId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate preview');
-      }
-
-      const html = await response.text();
+      const html = await generateResumePreview(structuredContent, formData.templateId || null);
       setPreviewHtml(html);
       setShowPreview(true);
     } catch (err) {
@@ -257,7 +233,16 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
+                    try {
+                      validateFile(file);
+                    } catch (validationError) {
+                      setError(validationError.message);
+                      e.target.value = '';
+                      return;
+                    }
+
                     setUploadedFile(file);
+                    setError('');
                     setFormData(prev => ({ ...prev, content: '' })); // Clear content when file is uploaded
                   }
                 }}
@@ -354,7 +339,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
             >
               {loading ? (
                 <div className="flex items-center justify-center">
-                  <LoadingSpinner size="sm" />
+                  <LoadingSpinner size="sm" label="" />
                   <span className="ml-2">Saving...</span>
                 </div>
               ) : (
@@ -397,7 +382,12 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
                     </svg>
                   </button>
                 </div>
-                <div className="resume-preview max-h-[60vh] overflow-y-auto" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <iframe
+                  title="Resume Preview"
+                  className="resume-preview h-[60vh] w-full border-0 rounded-xl bg-white"
+                  sandbox=""
+                  srcDoc={previewHtml}
+                />
               </div>
               <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700">
                 <button
