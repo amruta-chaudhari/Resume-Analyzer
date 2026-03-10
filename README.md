@@ -190,6 +190,7 @@ VITE_API_URL=http://localhost:3001
 | POST | `/api/analyze` | Analyze resume vs job description |
 | GET | `/api/models` | List available AI models |
 | POST | `/api/models/refresh` | Refresh model cache |
+| GET | `/api/health/upstream` | Admin upstream health check |
 
 ### Resumes
 | Method | Endpoint | Description |

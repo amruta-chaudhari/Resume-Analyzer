@@ -22,8 +22,8 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        await testConnection();
-        setConnectionStatus('connected');
+        const result = await testConnection();
+        setConnectionStatus(result.success ? 'connected' : 'error');
       } catch (error) {
         console.error('Connection check failed:', error);
         setConnectionStatus('error');

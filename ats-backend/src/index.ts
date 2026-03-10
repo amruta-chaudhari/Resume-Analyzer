@@ -71,6 +71,7 @@ const corsOptions: cors.CorsOptions = {
 const globalLimiter = createRateLimiter(15 * 60 * 1000, 500);
 const authLimiter = createRateLimiter(15 * 60 * 1000, 50);
 const analyzeLimiter = createRateLimiter(15 * 60 * 1000, 40);
+const adminLimiter = createRateLimiter(15 * 60 * 1000, 10);
 
 app.use((_, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -86,6 +87,8 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.use('/api/auth', authLimiter);
 app.use('/api/analyze', analyzeLimiter);
+app.use('/api/models/refresh', adminLimiter);
+app.use('/api/templates/seed', adminLimiter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err.message === 'Not allowed by CORS') {

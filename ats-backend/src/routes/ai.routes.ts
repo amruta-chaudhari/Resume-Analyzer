@@ -12,6 +12,25 @@ import { safeJsonParse } from '../lib/json';
 const router = Router();
 const aiService = new AIService();
 
+const requireAdmin = async (req: AuthRequest, res: Response) => {
+  if (!req.userId) {
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: { subscriptionTier: true },
+  });
+
+  if (!user || user.subscriptionTier !== 'admin') {
+    res.status(403).json({ success: false, error: 'Admin access required' });
+    return null;
+  }
+
+  return user;
+};
+
 const serverError = (res: Response, error: string) => {
   res.status(500).json({
     success: false,
@@ -57,8 +76,13 @@ router.get('/models', async (req, res) => {
 });
 
 // POST /api/models/refresh - Refresh model cache
-router.post('/models/refresh', async (req, res) => {
+router.post('/models/refresh', authMiddleware, async (req: AuthRequest, res) => {
     try {
+        const adminUser = await requireAdmin(req, res);
+        if (!adminUser) {
+            return;
+        }
+
         const models = await aiService.refreshModelsCache();
         res.json({
             success: true,
@@ -525,9 +549,29 @@ router.delete('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, 
     }
 });
 
-// GET /health - Health check
-router.get('/health', async (req, res) => {
+// GET /health - Local health check
+router.get('/health', async (_req, res) => {
     try {
+        res.json({
+            success: true,
+            data: {
+                status: 'healthy',
+                service: 'ATS Resume Analyzer API'
+            }
+        });
+    } catch (_error: any) {
+        serverError(res, 'Health check failed');
+    }
+});
+
+// GET /health/upstream - Protected upstream dependency check
+router.get('/health/upstream', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const adminUser = await requireAdmin(req, res);
+        if (!adminUser) {
+            return;
+        }
+
         const health = await aiService.checkHealth();
         res.json({
             success: true,
