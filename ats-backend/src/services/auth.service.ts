@@ -6,7 +6,11 @@ import prisma from '../lib/prisma';
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class AuthService {
+  private lastPruneRun = 0;
+
   async register(email: string, password: string, firstName?: string, lastName?: string) {
+    await this.pruneRefreshSessions();
+
     // Check if user exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -34,6 +38,8 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
+    await this.pruneRefreshSessions();
+
     // Find user
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -61,6 +67,8 @@ export class AuthService {
 
   async refreshToken(refreshToken: string) {
     try {
+      await this.pruneRefreshSessions();
+
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
 
       if (!decoded?.userId || !decoded?.sessionId) {
@@ -133,6 +141,46 @@ export class AuthService {
         lastUsedAt: new Date(),
       },
     });
+  }
+
+  async revokeRefreshSession(refreshToken: string) {
+    const tokenHash = this.hashToken(refreshToken);
+    const session = await prisma.refreshSession.findUnique({
+      where: { tokenHash },
+      select: { userId: true },
+    });
+
+    if (!session) {
+      return;
+    }
+
+    await this.revokeAllRefreshSessions(session.userId);
+  }
+
+  private async pruneRefreshSessions() {
+    const nowMs = Date.now();
+    if (nowMs - this.lastPruneRun < 10 * 60 * 1000) {
+      return;
+    }
+
+    const now = new Date();
+    const staleRevokedCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    await prisma.refreshSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          {
+            revokedAt: {
+              not: null,
+              lt: staleRevokedCutoff,
+            },
+          },
+        ],
+      },
+    });
+
+    this.lastPruneRun = nowMs;
   }
 
   private generateAccessToken(userId: string, email: string): string {

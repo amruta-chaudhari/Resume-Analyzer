@@ -11,7 +11,7 @@ import useTheme from '../hooks/useTheme';
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
-  const { clearAuth, updateUser, hasHydrated } = useAuthStore();
+  const { clearAuth, updateUser, refreshToken, hasHydrated } = useAuthStore();
   const location = useLocation();
 
   // Model Parameters state
@@ -90,7 +90,7 @@ const Dashboard = () => {
   }, []);
 
   const handleLogout = () => {
-    authService.logout().catch(() => {});
+    authService.logout(refreshToken).catch(() => {});
     clearAuth();
     window.location.href = '/login';
   };

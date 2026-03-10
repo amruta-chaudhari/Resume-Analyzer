@@ -139,13 +139,17 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   }
 });
 
-router.post('/logout', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/logout', [
+  body('refreshToken').isLength({ min: 1 }),
+], async (req: Request, res: Response) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Invalid input', details: errors.array() });
     }
 
-    await authService.revokeAllRefreshSessions(req.userId);
+    const { refreshToken } = req.body;
+    await authService.revokeRefreshSession(refreshToken);
     res.json({ success: true, message: 'Logged out' });
   } catch (_error: any) {
     res.status(500).json({ error: 'Logout failed' });
