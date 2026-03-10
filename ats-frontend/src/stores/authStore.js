@@ -44,6 +44,9 @@ const useAuthStore = create(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
+        if (!state?.refreshToken) {
+          state?.clearAuth();
+        }
         state?.setHasHydrated(true);
       },
     }
