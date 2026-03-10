@@ -85,11 +85,21 @@ apiClient.interceptors.response.use(
 
         return apiClient(originalRequest);
       } catch (refreshError) {
-        useAuthStore.getState().clearAuth();
-        // Only redirect to login if we're not already on the login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        const refreshStatus = refreshError?.response?.status;
+        const shouldClearAuth =
+          refreshError?.message === 'Missing refresh token' ||
+          refreshStatus === 400 ||
+          refreshStatus === 401 ||
+          refreshStatus === 403;
+
+        if (shouldClearAuth) {
+          useAuthStore.getState().clearAuth();
+          // Only redirect to login if we're not already on the login page
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
+
         return Promise.reject(refreshError);
       } finally {
         refreshPromise = null;
