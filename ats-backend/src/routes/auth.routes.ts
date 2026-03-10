@@ -140,7 +140,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 router.post('/logout', [
-  body('refreshToken').isLength({ min: 1 }),
+  body('refreshToken').optional().isLength({ min: 1 }),
 ], async (req: Request, res: Response) => {
   try {
     const errors = validationResult(req);
@@ -149,7 +149,10 @@ router.post('/logout', [
     }
 
     const { refreshToken } = req.body;
-    await authService.revokeRefreshSession(refreshToken);
+    if (typeof refreshToken === 'string' && refreshToken.length > 0) {
+      await authService.revokeRefreshSession(refreshToken);
+    }
+
     res.json({ success: true, message: 'Logged out' });
   } catch (_error: any) {
     res.status(500).json({ error: 'Logout failed' });
