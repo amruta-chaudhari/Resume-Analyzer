@@ -42,7 +42,7 @@ export class AuthService {
 
     // Find user
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new Error('Invalid credentials');
     }
 
@@ -106,9 +106,15 @@ export class AuthService {
         throw new Error('Refresh token expired');
       }
 
-      const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { id: true, email: true, deletedAt: true },
+      });
 
-      if (!user) {
+      if (!user || user.deletedAt) {
+        if (user?.id) {
+          await this.revokeAllRefreshSessions(user.id);
+        }
         throw new Error('User not found');
       }
 

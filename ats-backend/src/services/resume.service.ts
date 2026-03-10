@@ -465,7 +465,7 @@ export class ResumeService {
   async exportToWord(resumeId: string, userId: string): Promise<Buffer> {
     try {
       const resume = await prisma.resume.findFirst({
-        where: { id: resumeId, userId },
+        where: { id: resumeId, userId, deletedAt: null },
         include: { template: true }
       });
 
