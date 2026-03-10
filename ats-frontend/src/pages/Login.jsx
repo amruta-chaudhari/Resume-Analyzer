@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import { authService } from '../services/authService';
 
@@ -11,6 +11,9 @@ const Login = () => {
 
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const redirectTarget = location.state?.from || '/dashboard';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +23,7 @@ const Login = () => {
     try {
       const data = await authService.login(email, password);
       setAuth(data.user, data.tokens.accessToken, data.tokens.refreshToken);
-      navigate('/dashboard');
+      navigate(redirectTarget, { replace: true });
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message || 'Login failed');
