@@ -15,7 +15,7 @@ const useAuthStore = create(
           user: user,
           accessToken: accessToken,
           refreshToken: refreshToken,
-          isAuthenticated: true,
+          isAuthenticated: Boolean(accessToken || refreshToken),
         });
       },
 
@@ -41,11 +41,12 @@ const useAuthStore = create(
       partialize: (state) => ({
         user: state.user,
         refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state?.refreshToken) {
           state?.clearAuth();
+        } else {
+          state?.setAuth(state.user, null, state.refreshToken);
         }
         state?.setHasHydrated(true);
       },

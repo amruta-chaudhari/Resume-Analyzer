@@ -52,6 +52,11 @@ const normalizeResumeUpdatePayload = (body: any) => {
     if (typeof body.content !== 'string' || body.content.trim().length === 0) {
       throw new Error('Content must be a non-empty string');
     }
+
+    if (body.content.length > 100000) {
+      throw new Error('Content must be 100000 characters or fewer');
+    }
+
     normalized.content = body.content;
   }
 
@@ -66,6 +71,11 @@ const normalizeResumeUpdatePayload = (body: any) => {
     if (body.structuredData !== null && typeof body.structuredData !== 'string' && typeof body.structuredData !== 'object') {
       throw new Error('Structured data must be an object, JSON string, or null');
     }
+
+    if (typeof body.structuredData === 'string' && body.structuredData.length > 200000) {
+      throw new Error('Structured data must be 200000 characters or fewer');
+    }
+
     normalized.structuredData = body.structuredData;
   }
 
@@ -131,8 +141,28 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
   try {
     const { title, content, templateId, structuredData } = req.body;
 
-    if (!title) {
+    if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: 'Title is required' });
+    }
+
+    const normalizedTitle = title.trim();
+    if (normalizedTitle.length < 2 || normalizedTitle.length > 200) {
+      return res.status(400).json({ error: 'Title must be between 2 and 200 characters' });
+    }
+
+    if (templateId !== undefined && templateId !== null && typeof templateId !== 'string') {
+      return res.status(400).json({ error: 'Template ID must be a string' });
+    }
+
+    if (content !== undefined && content !== null) {
+      if (typeof content !== 'string') {
+        return res.status(400).json({ error: 'Content must be a string' });
+      }
+
+      const contentLength = content.trim().length;
+      if (contentLength > 100000) {
+        return res.status(400).json({ error: 'Content must be 100000 characters or fewer' });
+      }
     }
 
     let resume;
@@ -140,7 +170,7 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
     if (req.file) {
       resume = await resumeService.createResumeFromFile(
         req.userId!,
-        title,
+        normalizedTitle,
         req.file,
         templateId
       );
@@ -153,7 +183,7 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
 
       resume = await resumeService.createResumeFromStructuredData(
         req.userId!,
-        title,
+        normalizedTitle,
         parsedData,
         templateId
       );
@@ -161,7 +191,7 @@ router.post('/', upload.single('resume'), async (req: AuthRequest & { file?: Exp
       // Plain text content
       resume = await resumeService.createResumeFromText(
         req.userId!,
-        title,
+        normalizedTitle,
         content,
         templateId
       );
