@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { analyzeStoredResume, downloadResumeFile, exportResume } from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
 import AnalysisResults from './AnalysisResults';
 
 const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
+  const navigate = useNavigate();
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -22,6 +24,13 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
       setError('');
 
       const result = await analyzeStoredResume(initialResume.id, jobDescription);
+      if (result?.savedAnalysisId || result?.id) {
+        navigate(`/analysis/${result.savedAnalysisId || result.id}`, {
+          state: { analysis: result },
+        });
+        return;
+      }
+
       setAnalysisResult(result);
       setShowAnalysis(true);
     } catch (err) {

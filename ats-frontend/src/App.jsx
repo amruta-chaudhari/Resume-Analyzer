@@ -13,6 +13,9 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/analysis" element={<Navigate to="/dashboard/analysis" replace />} />
+          <Route path="/resumes" element={<Navigate to="/dashboard/resumes" replace />} />
+          <Route path="/history" element={<Navigate to="/dashboard/history" replace />} />
           <Route
             path="/dashboard/*"
             element={
@@ -30,6 +33,7 @@ function App() {
             }
           />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
     </BrowserRouter>

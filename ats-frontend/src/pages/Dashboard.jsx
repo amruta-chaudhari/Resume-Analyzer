@@ -378,6 +378,7 @@ const Dashboard = () => {
           />
           <Route path="resumes" element={<ResumeManagementPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="*" element={<Navigate to="/dashboard/analysis" replace />} />
         </Routes>
 
         {/* Footer */}
