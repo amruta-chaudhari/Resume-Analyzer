@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { AuthService } from '../services/auth.service';
 import { AuthRequest, authMiddleware } from '../middleware/auth.middleware';
+import { sanitizeEmail, sanitizeString } from '../utils/sanitizer';
 import prisma from '../lib/prisma';
 
 const router = Router();
@@ -20,9 +21,12 @@ router.post('/register', [
       return res.status(400).json({ error: 'Invalid input', details: errors.array() });
     }
 
-    const { email, password, firstName, lastName } = req.body;
+    const email = sanitizeEmail(req.body.email);
+    const password = req.body.password; // Don't sanitize passwords
+    const firstName = sanitizeString(req.body.firstName);
+    const lastName = sanitizeString(req.body.lastName);
 
-    const result = await authService.register(email, password, firstName, lastName);
+    const result = await authService.register(email, password, firstName || undefined, lastName || undefined);
 
     res.status(201).json({
       success: true,
@@ -55,7 +59,8 @@ router.post('/login', [
       return res.status(400).json({ error: 'Invalid input', details: errors.array() });
     }
 
-    const { email, password } = req.body;
+    const email = sanitizeEmail(req.body.email);
+    const password = req.body.password; // Don't sanitize passwords
 
     const result = await authService.login(email, password);
 

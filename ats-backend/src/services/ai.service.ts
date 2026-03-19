@@ -1,5 +1,15 @@
 import OpenAI from 'openai';
 import axios from 'axios';
+import type {
+  AIModel,
+  ModelCache,
+  FormattingAnalysis,
+  ModelParameters,
+  AnalysisResult,
+  CompletionParameters,
+  OpenAICompletion,
+  HealthCheckResponse,
+} from '../types/index';
 
 // Lazy initialization of OpenAI client
 let _openai: OpenAI | null = null;
@@ -14,9 +24,9 @@ const getOpenAIClient = (): OpenAI => {
 };
 
 // Model cache with 24-hour expiration
-let modelCache = {
+let modelCache: ModelCache = {
     data: [],
-    lastFetched: null as number | null,
+    lastFetched: null,
     isLoading: false
 };
 
@@ -25,7 +35,7 @@ const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'google/gemini-2.0-flash-exp
 
 export class AIService {
     // Basic formatting analysis based on text patterns
-    private analyzeFormattingIssues(text: string): { detectedIssues: string[], formattingHints: string[] } {
+    private analyzeFormattingIssues(text: string): FormattingAnalysis {
         const detectedIssues: string[] = [];
         const formattingHints: string[] = [];
 
@@ -94,7 +104,7 @@ export class AIService {
 
         return { detectedIssues, formattingHints };
     }
-    async getAvailableModels() {
+    async getAvailableModels(): Promise<AIModel[]> {
         const now = Date.now();
 
         // Return cached data if still valid
@@ -119,9 +129,9 @@ export class AIService {
             const response = await axios.get('https://openrouter.ai/api/v1/models');
 
             // Filter and format models
-            const models = response.data.data
-                .filter((model: any) => model.id.includes('free') || model.pricing?.prompt === '0')
-                .map((model: any) => ({
+            const models: AIModel[] = response.data.data
+                .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
+                .map((model: AIModel) => ({
                     id: model.id,
                     name: model.name || model.id,
                     provider: model.id.split('/')[0],
@@ -150,22 +160,25 @@ export class AIService {
         }
     }
 
-    async refreshModelsCache() {
+    async refreshModelsCache(): Promise<AIModel[]> {
         modelCache.data = [];
         modelCache.lastFetched = null;
         return this.getAvailableModels();
+    }
+
+    // Method for testing - clears the module-level cache
+    clearCache(): void {
+        modelCache.data = [];
+        modelCache.lastFetched = null;
+        modelCache.isLoading = false;
     }
 
     async analyzeResume(
         text: string, 
         jobDescription: string, 
         selectedModel?: string,
-        modelParameters?: {
-            temperature?: number;
-            max_tokens?: number;
-            include_reasoning?: boolean;
-        }
-    ) {
+        modelParameters?: ModelParameters
+    ): Promise<AnalysisResult> {
         const model = selectedModel || DEFAULT_MODEL;
 
         // Pre-analyze formatting issues
@@ -272,7 +285,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
 
         try {
             // Build completion parameters with defaults and user overrides
-            const completionParams: any = {
+            const completionParams: CompletionParameters = {
                 model: model,
                 messages: [
                     {
@@ -290,9 +303,9 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 completionParams.reasoning_effort = 'medium'; // Can be 'low', 'medium', or 'high'
             }
 
-            const completion = await getOpenAIClient().chat.completions.create(completionParams);
+            const completion = await getOpenAIClient().chat.completions.create(completionParams as any);
 
-            const response = completion.choices[0]?.message?.content;
+            const response = (completion as OpenAICompletion).choices[0]?.message?.content;
             if (!response) {
                 throw new Error('No response from AI model');
             }
@@ -306,7 +319,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
             }
 
             // Parse the JSON response
-            const analysisResult = JSON.parse(jsonString);
+            const analysisResult = JSON.parse(jsonString) as AnalysisResult;
 
             // Ensure the response has the expected structure
             if (!analysisResult.overallScore || !analysisResult.skillsAnalysis || !analysisResult.formattingScore) {
@@ -321,7 +334,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
         }
     }
 
-    async checkHealth() {
+    async checkHealth(): Promise<HealthCheckResponse> {
         try {
             // Test OpenRouter API connectivity
             const response = await axios.get('https://openrouter.ai/api/v1/models');
