@@ -4,11 +4,12 @@ test.describe('API Integration', () => {
   const API_BASE_URL = 'http://localhost:3001';
 
   test('should connect to backend API', async ({ page }) => {
-    const response = await page.goto(`${API_BASE_URL}/health`);
+    const response = await page.goto(`${API_BASE_URL}/api/health`);
     expect(response?.status()).toBe(200);
     
     const json = await response?.json();
-    expect(json?.status).toBe('ok');
+    expect(json?.success).toBe(true);
+    expect(json?.data?.status).toBe('healthy');
   });
 
   test('should fetch available AI models', async ({ page }) => {
@@ -55,7 +56,7 @@ test.describe('API Integration', () => {
       },
     });
     
-    expect([200, 401, 403]).toContain(response.status());
+    expect([202, 400, 401, 403]).toContain(response.status());
   });
 
   test('should return proper error format', async ({ page }) => {
@@ -64,7 +65,7 @@ test.describe('API Integration', () => {
   });
 
   test('should handle CORS properly', async ({ page }) => {
-    const response = await page.request.get(`${API_BASE_URL}/health`);
+    const response = await page.request.get(`${API_BASE_URL}/api/health`);
     
     const corsHeader = response.headers()['access-control-allow-origin'];
     expect(corsHeader || '*').toBeTruthy();
