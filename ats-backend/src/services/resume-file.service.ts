@@ -1,6 +1,6 @@
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
-import { FileStorageService } from './file-storage.service';
+import { FileStorageService, FileMetadata } from './file-storage.service';
 
 export interface ProcessedResume {
   text: string;

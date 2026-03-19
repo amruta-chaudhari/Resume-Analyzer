@@ -1,11 +1,17 @@
 import OpenAI from 'openai';
 import axios from 'axios';
 
-// Initialize OpenAI with OpenRouter
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
-});
+// Lazy initialization of OpenAI client
+let _openai: OpenAI | null = null;
+const getOpenAIClient = (): OpenAI => {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
+    });
+  }
+  return _openai;
+};
 
 // Model cache with 24-hour expiration
 let modelCache = {
@@ -284,7 +290,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 completionParams.reasoning_effort = 'medium'; // Can be 'low', 'medium', or 'high'
             }
 
-            const completion = await openai.chat.completions.create(completionParams);
+            const completion = await getOpenAIClient().chat.completions.create(completionParams);
 
             const response = completion.choices[0]?.message?.content;
             if (!response) {
