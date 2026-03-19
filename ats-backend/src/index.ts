@@ -1,11 +1,26 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.routes';
-import resumeRoutes from './routes/resume.routes';
-import aiRoutes from './routes/ai.routes';
-import templateRoutes from './routes/template.routes';
+import {
+  authRoutes,
+  resumeRoutes,
+  modelsRoutes,
+  analysisRoutes,
+  jobDescriptionsRoutes,
+  healthRoutes,
+  templateRoutes,
+} from './routes/index';
 import { authMiddleware } from './middleware/auth.middleware';
+import { errorHandler, notFoundHandler } from './middleware/error.middleware';
+import { requestContextMiddleware } from './middleware/request-context.middleware';
+import {
+  analysesPerDayLimiter,
+  resumeUploadsPerMonthLimiter,
+  jobDescriptionsPerMonthLimiter,
+} from './middleware/rate-limiter.middleware';
+import { Logger } from './utils/logger';
+import { initializeAnalysisJobProcessor } from './jobs/analyze-resume.job';
+import { closeQueues } from './config/queue.config';
 import path from 'path';
 
 dotenv.config();
@@ -86,6 +101,8 @@ app.use((_, res, next) => {
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   next();
 });
+// Add request context tracking
+app.use(requestContextMiddleware);
 app.use(cors(corsOptions));
 app.use(globalLimiter);
 app.use(express.json({ limit: '1mb' }));
@@ -106,23 +123,25 @@ app.use((err: Error, _req: express.Request, res: express.Response, next: express
 
 // Routes
 app.use('/api/auth', authRoutes);
+
+// Apply per-user rate limiters within routes after auth where needed
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/templates', templateRoutes);
-app.use('/api', aiRoutes);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Split AI routes for better modularity
+app.use('/api', modelsRoutes); // GET /models, POST /models/refresh
+app.use('/api', analysisRoutes); // POST /analyze, GET /analyses, GET /analysis/:jobId/status, GET /queue/stats
+app.use('/api', jobDescriptionsRoutes); // GET/POST/PUT/DELETE /job-descriptions
+app.use('/api', healthRoutes); // GET /health, GET /health/upstream
+
+// Legacy health check endpoint (kept for backward compatibility)
+app.get('/health-legacy', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     service: 'ATS Resume Analyzer API',
     version: '1.0.0'
   });
-});
-
-// Protected route example
-app.get('/api/protected', authMiddleware, (req, res) => {
-  res.json({ message: 'This is a protected route', userId: (req as any).userId });
 });
 
 // serve react at /
@@ -133,14 +152,45 @@ app.get(/^\/(?!api(?:\/|$)|health(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "../build/index.html"));
 });
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  if (res.headersSent) {
-    return;
+// 404 handler (must be before error handler)
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
+
+// Initialize job processor and start server
+const startServer = async () => {
+  try {
+    // Initialize analysis job processor
+    await initializeAnalysisJobProcessor();
+    Logger.info('Analysis job processor initialized');
+
+    const server = app.listen(PORT, () => {
+      Logger.info(`Server running on port ${PORT}`);
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      Logger.info('SIGTERM received, shutting down gracefully');
+      server.close(async () => {
+        await closeQueues();
+        Logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', async () => {
+      Logger.info('SIGINT received, shutting down gracefully');
+      server.close(async () => {
+        await closeQueues();
+        Logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+  } catch (error) {
+    Logger.error('Failed to start server:', error instanceof Error ? error : new Error(String(error)));
+    process.exit(1);
   }
+};
 
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+startServer();
