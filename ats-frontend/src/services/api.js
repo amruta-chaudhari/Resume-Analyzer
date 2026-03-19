@@ -192,6 +192,46 @@ export const analyzeResume = async (resumeFile, jobDescription, selectedModel = 
   }
 };
 
+export const getAnalysisJobStatus = async (jobId) => {
+  try {
+    const response = await apiClient.get(`/api/analysis/${jobId}/status`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(`Failed to fetch analysis status: ${error.message}`);
+  }
+};
+
+export const waitForAnalysisCompletion = async (
+  jobId,
+  { intervalMs = 1500, timeoutMs = 120000 } = {}
+) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const status = await getAnalysisJobStatus(jobId);
+
+    if (status.state === 'completed') {
+      return {
+        ...status,
+        result: status.result
+          ? {
+              ...status.result,
+              savedAnalysisId: status.result.savedAnalysisId || status.result.analysisId || null,
+            }
+          : null,
+      };
+    }
+
+    if (status.state === 'failed') {
+      throw new Error(status.error || 'Analysis failed during processing.');
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Analysis is taking longer than expected. Please check your history shortly.');
+};
+
 // Get available AI models from backend
 export const getAvailableModels = async () => {
   try {
@@ -323,8 +363,10 @@ const normalizeJobDescriptionPayload = (jobData = {}) => {
 // Job description operations
 export const getJobDescriptions = async () => {
   try {
-    const response = await apiClient.get('/api/job-descriptions');
-    return response.data.data;
+    const response = await apiClient.get('/api/job-descriptions', {
+      params: { page: 1, limit: 100 },
+    });
+    return response.data.data?.jobDescriptions || [];
   } catch (error) {
     console.error('Failed to fetch job descriptions:', error);
     throw new Error(`Failed to load job descriptions: ${error.message}`);
@@ -428,10 +470,20 @@ export const createResumeFromStructuredData = async (title, structuredData, temp
 export const updateResume = async (resumeId, updates) => {
   try {
     const response = await apiClient.put(`/api/resumes/${resumeId}`, updates);
-    return response.data.data;
+    return response.data.data.resume;
   } catch (error) {
     console.error('Failed to update resume:', error);
     throw new Error(`Failed to update resume: ${error.message}`);
+  }
+};
+
+export const getResumeById = async (resumeId) => {
+  try {
+    const response = await apiClient.get(`/api/resumes/${resumeId}`);
+    return response.data.data.resume;
+  } catch (error) {
+    console.error('Failed to fetch resume:', error);
+    throw new Error(`Failed to fetch resume: ${error.message}`);
   }
 };
 
@@ -448,7 +500,7 @@ export const deleteResume = async (resumeId) => {
 // Health check endpoint
 export const checkHealth = async () => {
   try {
-    const response = await apiClient.get('/health');
+    const response = await apiClient.get('/api/health');
     return response.data;
   } catch (error) {
     throw new Error('Backend service unavailable');

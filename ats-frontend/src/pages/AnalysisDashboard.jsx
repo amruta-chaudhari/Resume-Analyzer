@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyzeResume, testConnection } from '../services/api';
+import { analyzeResume, getAnalysisById, testConnection, waitForAnalysisCompletion } from '../services/api';
 import FileUpload from '../components/FileUpload';
 import JobDescriptionInput from '../components/JobDescriptionInput';
 import ModelSelector from '../components/ModelSelector';
@@ -110,11 +110,25 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
         modelParameters,
         jobTitle
       );
-      setAnalysisResult(result);
+
+      let resolvedAnalysis = result;
+
+      if (result?.jobId) {
+        const completedJob = await waitForAnalysisCompletion(result.jobId);
+        const analysisId = completedJob.result?.savedAnalysisId;
+
+        if (!analysisId) {
+          throw new Error('Analysis finished without a saved result.');
+        }
+
+        resolvedAnalysis = await getAnalysisById(analysisId);
+      }
+
+      setAnalysisResult(resolvedAnalysis);
 
       // Redirect to analysis page with the result
-      navigate(`/analysis/${result.savedAnalysisId || 'new'}`, {
-        state: { analysis: result }
+      navigate(`/analysis/${resolvedAnalysis.savedAnalysisId || resolvedAnalysis.id || 'new'}`, {
+        state: { analysis: resolvedAnalysis }
       });
     } catch (err) {
       setError(err.message || 'Analysis failed. Please try again.');

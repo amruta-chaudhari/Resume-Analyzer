@@ -5,6 +5,7 @@ import {
   createResumeFromFile,
   parseResumeText,
   generateResumePreview,
+  getTemplates,
   validateFile,
 } from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
@@ -21,17 +22,43 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
   const [error, setError] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
+  const [templates, setTemplates] = useState([
+    { id: '', name: 'Blank Template', description: 'Start with a clean slate' }
+  ]);
   const previewCloseButtonRef = useRef(null);
 
   useEffect(() => {
     if (resume) {
       setFormData({
         title: resume.title || '',
-        content: resume.content || '',
+        content: resume.content || resume.extractedText || '',
         templateId: resume.templateId || ''
       });
     }
   }, [resume]);
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const fetchedTemplates = await getTemplates();
+        setTemplates([
+          { id: '', name: 'Blank Template', description: 'Start with a clean slate' },
+          ...fetchedTemplates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            description: template.description || 'ATS-friendly resume template',
+          })),
+        ]);
+      } catch (templateError) {
+        console.error('Failed to load templates:', templateError);
+        setTemplates([
+          { id: '', name: 'Blank Template', description: 'Start with a clean slate' }
+        ]);
+      }
+    };
+
+    loadTemplates();
+  }, []);
 
   useEffect(() => {
     if (showPreview) {
@@ -155,13 +182,6 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
       setLoading(false);
     }
   };
-
-  const templates = [
-    { id: '', name: 'Blank Template', description: 'Start with a clean slate' },
-    { id: 'modern', name: 'Modern Professional', description: 'Clean and contemporary design' },
-    { id: 'classic', name: 'Classic Corporate', description: 'Traditional business format' },
-    { id: 'creative', name: 'Creative Portfolio', description: 'Showcase your creative work' }
-  ];
 
   return (
     <div className="max-w-4xl mx-auto">

@@ -21,7 +21,7 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
       } else {
         setResumes(prev => [...prev, ...result.resumes]);
       }
-      setHasMore(page < result.pagination.pages);
+      setHasMore(Boolean(result.pagination?.hasNextPage || page < (result.pagination?.totalPages || 0)));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -181,7 +181,8 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
               {/* Resume Preview */}
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-4">
                 <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
-                  {resume.content?.substring(0, 150)}...
+                  {(resume.previewText || resume.content || resume.extractedText || 'No preview available').substring(0, 150)}
+                  ...
                 </div>
               </div>
 
@@ -199,7 +200,7 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
                       <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                       </svg>
-                      Template
+                      {resume.templateName || 'Template'}
                     </span>
                   )}
                 </div>
