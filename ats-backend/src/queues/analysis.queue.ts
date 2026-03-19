@@ -1,10 +1,8 @@
 import Queue from 'bull';
 import { createQueue } from '../config/queue.config';
+import queueConfig from '../config/queue.config';
 import { Logger } from '../utils/logger';
 
-/**
- * Job data structure for resume analysis
- */
 export interface AnalysisJobData {
   userId: string;
   resumeText: string;
@@ -19,9 +17,6 @@ export interface AnalysisJobData {
   include_reasoning?: boolean;
 }
 
-/**
- * Job result structure
- */
 export interface AnalysisJobResult {
   analysisId: string;
   resumeId: string;
@@ -31,33 +26,96 @@ export interface AnalysisJobResult {
   error?: string;
 }
 
-// Create the analysis queue
-let analysisQueue: Queue.Queue<AnalysisJobData> | null = null;
+type JobState = 'waiting' | 'active' | 'completed' | 'failed';
 
-/**
- * Get or create the analysis queue
- */
-export const getAnalysisQueue = (): Queue.Queue<AnalysisJobData> => {
+type LocalJobRecord = {
+  id: string;
+  data: AnalysisJobData;
+  state: JobState;
+  progress: number;
+  attemptsMade: number;
+  processedOn?: number;
+  finishedOn?: number;
+  result?: AnalysisJobResult;
+  failedReason?: string;
+};
+
+type AnalysisProcessor = (job: Queue.Job<AnalysisJobData>) => Promise<AnalysisJobResult>;
+
+let analysisQueue: Queue.Queue<AnalysisJobData> | null = null;
+let localProcessor: AnalysisProcessor | null = null;
+let localJobCounter = 0;
+const localJobs = new Map<string, LocalJobRecord>();
+
+class LocalQueueJob {
+  private readonly record: LocalJobRecord;
+
+  constructor(record: LocalJobRecord) {
+    this.record = record;
+  }
+
+  get id() {
+    return this.record.id;
+  }
+
+  get data() {
+    return this.record.data;
+  }
+
+  get attemptsMade() {
+    return this.record.attemptsMade;
+  }
+
+  get processedOn() {
+    return this.record.processedOn;
+  }
+
+  get finishedOn() {
+    return this.record.finishedOn;
+  }
+
+  get returnvalue() {
+    return this.record.result;
+  }
+
+  get failedReason() {
+    return this.record.failedReason;
+  }
+
+  progress(value?: number) {
+    if (typeof value === 'number') {
+      this.record.progress = value;
+    }
+
+    return this.record.progress;
+  }
+
+  async getState(): Promise<JobState> {
+    return this.record.state;
+  }
+}
+
+const getAnalysisQueue = (): Queue.Queue<AnalysisJobData> => {
   if (!analysisQueue) {
     analysisQueue = createQueue<AnalysisJobData>('resume-analysis', {
       settings: {
         stalledInterval: 5000,
         maxStalledCount: 2,
-        lockDuration: 60000, // 60 seconds for analysis
+        lockDuration: 60000,
         lockRenewTime: 30000,
-        retryProcessDelay: 5000
+        retryProcessDelay: 5000,
       },
       defaultJobOptions: {
-        attempts: 3, // Retry up to 3 times
+        attempts: 3,
         backoff: {
           type: 'exponential',
-          delay: 2000 // Start with 2 second delay, exponential increase
+          delay: 2000,
         },
         removeOnComplete: {
-          age: 3600 // Keep completed jobs for 1 hour
+          age: 3600,
         },
-        removeOnFail: false // Keep failed jobs for investigation
-      }
+        removeOnFail: false,
+      },
     });
 
     Logger.info('Analysis queue initialized with retry strategy (3 attempts, exponential backoff)');
@@ -66,30 +124,92 @@ export const getAnalysisQueue = (): Queue.Queue<AnalysisJobData> => {
   return analysisQueue;
 };
 
-/**
- * Queue a resume analysis job
- */
-export const queueAnalysisJob = async (data: AnalysisJobData): Promise<Queue.Job<AnalysisJobData>> => {
-  const queue = getAnalysisQueue();
-  
-  try {
-    const job = await queue.add(data, {
-      jobId: `analysis-${data.userId}-${Date.now()}` as any,
-      priority: 5,
-      delay: 0 // Process immediately
-    });
+export const registerAnalysisJobProcessor = (processor: AnalysisProcessor): void => {
+  if (queueConfig.useRedis) {
+    const queue = getAnalysisQueue();
 
-    Logger.info(`Analysis job queued: ${job.id} for user ${data.userId}`);
-    return job;
-  } catch (error) {
-    Logger.error('Failed to queue analysis job:', error instanceof Error ? error : new Error(String(error)));
-    throw error;
+    queue.process(processor);
+    queue.on('completed', (job: Queue.Job) => {
+      Logger.info(`Job ${job.id} completed with result:`, job.returnvalue);
+    });
+    queue.on('failed', (job: Queue.Job, error: Error) => {
+      Logger.error(`Job ${job.id} failed after ${job.attemptsMade} attempts: ${error.message}`);
+    });
+    queue.on('stalled', (job: Queue.Job) => {
+      Logger.warn(`Job ${job.id} stalled and will be retried`);
+    });
+    return;
+  }
+
+  localProcessor = processor;
+  Logger.info('Analysis queue running in local in-process mode');
+};
+
+const processLocalJob = async (record: LocalJobRecord): Promise<void> => {
+  if (!localProcessor) {
+    record.state = 'failed';
+    record.failedReason = 'Analysis processor not initialized';
+    record.finishedOn = Date.now();
+    return;
+  }
+
+  record.state = 'active';
+  record.processedOn = Date.now();
+
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    record.attemptsMade = attempt;
+
+    try {
+      const result = await localProcessor(new LocalQueueJob(record) as unknown as Queue.Job<AnalysisJobData>);
+      record.state = 'completed';
+      record.result = result;
+      record.progress = 100;
+      record.finishedOn = Date.now();
+      Logger.info(`Local analysis job ${record.id} completed`);
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      record.failedReason = message;
+
+      if (attempt === maxAttempts) {
+        record.state = 'failed';
+        record.finishedOn = Date.now();
+        Logger.error(`Local analysis job ${record.id} failed after ${attempt} attempts: ${message}`);
+        return;
+      }
+    }
   }
 };
 
-/**
- * Get job status
- */
+export const queueAnalysisJob = async (data: AnalysisJobData): Promise<{ id: string }> => {
+  if (queueConfig.useRedis) {
+    const queue = getAnalysisQueue();
+    const job = await queue.add(data, {
+      jobId: `analysis-${data.userId}-${Date.now()}` as any,
+      priority: 5,
+      delay: 0,
+    });
+
+    Logger.info(`Analysis job queued: ${job.id} for user ${data.userId}`);
+    return { id: String(job.id) };
+  }
+
+  const id = `local-analysis-${Date.now()}-${++localJobCounter}`;
+  const record: LocalJobRecord = {
+    id,
+    data,
+    state: 'waiting',
+    progress: 0,
+    attemptsMade: 0,
+  };
+
+  localJobs.set(id, record);
+  void Promise.resolve().then(() => processLocalJob(record));
+  Logger.info(`Local analysis job queued: ${id} for user ${data.userId}`);
+  return { id };
+};
+
 export const getJobStatus = async (jobId: string): Promise<{
   id: string;
   state: string;
@@ -101,54 +221,48 @@ export const getJobStatus = async (jobId: string): Promise<{
   startedAt?: Date;
   finishedAt?: Date;
 } | null> => {
-  const queue = getAnalysisQueue();
-  const job = await queue.getJob(jobId);
+  if (queueConfig.useRedis) {
+    const queue = getAnalysisQueue();
+    const job = await queue.getJob(jobId);
 
+    if (!job) {
+      return null;
+    }
+
+    const state = await job.getState();
+    const progress = job.progress();
+
+    return {
+      id: String(job.id),
+      state,
+      progress,
+      data: job.data,
+      result: job.returnvalue,
+      failedReason: job.failedReason,
+      attempt: job.attemptsMade,
+      startedAt: job.processedOn ? new Date(job.processedOn) : undefined,
+      finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
+    };
+  }
+
+  const job = localJobs.get(jobId);
   if (!job) {
     return null;
   }
 
-  const state = await job.getState();
-  const progress = job.progress();
-
   return {
-    id: String(job.id),
-    state,
-    progress,
+    id: job.id,
+    state: job.state,
+    progress: job.progress,
     data: job.data,
-    result: job.returnvalue,
+    result: job.result,
     failedReason: job.failedReason,
     attempt: job.attemptsMade,
     startedAt: job.processedOn ? new Date(job.processedOn) : undefined,
-    finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined
+    finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
   };
 };
 
-/**
- * Cancel a queued job
- */
-export const cancelJob = async (jobId: string): Promise<boolean> => {
-  const queue = getAnalysisQueue();
-  const job = await queue.getJob(jobId);
-
-  if (!job) {
-    Logger.warn(`Job ${jobId} not found`);
-    return false;
-  }
-
-  try {
-    await job.remove();
-    Logger.info(`Job ${jobId} cancelled`);
-    return true;
-  } catch (error) {
-    Logger.error(`Failed to cancel job ${jobId}:`, error instanceof Error ? error : new Error(String(error)));
-    return false;
-  }
-};
-
-/**
- * Get queue statistics
- */
 export const getQueueStats = async (): Promise<{
   active: number;
   delayed: number;
@@ -157,29 +271,38 @@ export const getQueueStats = async (): Promise<{
   completed: number;
   paused: number;
 }> => {
-  const queue = getAnalysisQueue();
-  
-  try {
-    const [active, delayed, failed, waiting, completed, paused] = await Promise.all([
-      queue.getActiveCount(),
-      queue.getDelayedCount(),
-      queue.getFailedCount(),
-      queue.getWaitingCount(),
-      queue.getCompletedCount(),
-      queue.getPausedCount()
-    ]);
+  if (queueConfig.useRedis) {
+    const queue = getAnalysisQueue();
 
-    return { active, delayed, failed, waiting, completed, paused };
-  } catch (error) {
-    Logger.error('Failed to get queue stats:', error instanceof Error ? error : new Error(String(error)));
-    return { active: 0, delayed: 0, failed: 0, waiting: 0, completed: 0, paused: 0 };
+    try {
+      const [active, delayed, failed, waiting, completed, paused] = await Promise.all([
+        queue.getActiveCount(),
+        queue.getDelayedCount(),
+        queue.getFailedCount(),
+        queue.getWaitingCount(),
+        queue.getCompletedCount(),
+        queue.getPausedCount(),
+      ]);
+
+      return { active, delayed, failed, waiting, completed, paused };
+    } catch (error) {
+      Logger.error('Failed to get queue stats:', error instanceof Error ? error : new Error(String(error)));
+    }
   }
+
+  const stats = { active: 0, delayed: 0, failed: 0, waiting: 0, completed: 0, paused: 0 };
+  for (const job of localJobs.values()) {
+    if (job.state === 'active') stats.active += 1;
+    if (job.state === 'failed') stats.failed += 1;
+    if (job.state === 'waiting') stats.waiting += 1;
+    if (job.state === 'completed') stats.completed += 1;
+  }
+  return stats;
 };
 
 export default {
-  getAnalysisQueue,
+  registerAnalysisJobProcessor,
   queueAnalysisJob,
   getJobStatus,
-  cancelJob,
-  getQueueStats
+  getQueueStats,
 };

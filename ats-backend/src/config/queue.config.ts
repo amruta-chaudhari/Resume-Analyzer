@@ -2,14 +2,13 @@ import Queue, { QueueOptions } from 'bull';
 import { Logger } from '../utils/logger';
 
 /**
- * Queue configuration with support for both Redis and in-memory adapters
- * Production: Uses Redis
- * Development: Uses in-memory queue (no persistence)
+ * Queue configuration.
+ * Redis-backed queues are enabled only when explicitly configured.
  */
 
-const isProduction = process.env.NODE_ENV === 'production';
-const useRedis = process.env.QUEUE_PROVIDER === 'redis' || isProduction;
+const useRedis = process.env.QUEUE_PROVIDER === 'redis';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const activeQueues = new Set<Queue.Queue<any>>();
 
 /**
  * Create queue with appropriate adapter based on environment
@@ -42,7 +41,8 @@ export const createQueue = <T = any>(
       Logger.warn(`Job ${job.id} stalled in queue "${queueName}"`);
     });
 
-    Logger.info(`Queue "${queueName}" created (using ${useRedis ? 'Redis' : 'in-memory'} adapter)`);
+    activeQueues.add(queue);
+    Logger.info(`Queue "${queueName}" created (using ${useRedis ? 'Redis' : 'local'} adapter)`);
     return queue;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
@@ -55,7 +55,8 @@ export const createQueue = <T = any>(
  * Close all queue connections gracefully
  */
 export const closeQueues = async (): Promise<void> => {
-  // Bull handles queue closure automatically
+  await Promise.allSettled(Array.from(activeQueues).map((queue) => queue.close()));
+  activeQueues.clear();
   Logger.info('Queue connections closed');
 };
 

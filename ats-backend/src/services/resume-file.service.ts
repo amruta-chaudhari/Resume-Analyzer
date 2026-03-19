@@ -1,4 +1,3 @@
-import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { FileStorageService, FileMetadata } from './file-storage.service';
 
@@ -49,6 +48,7 @@ export class ResumeFileService {
     try {
       switch (file.mimetype) {
         case 'application/pdf':
+          const { PDFParse } = await import('pdf-parse');
           const parser = new PDFParse({ data: buffer });
           const pdfData = await parser.getText();
           text = pdfData.text;

@@ -48,7 +48,7 @@ echo ""
 echo "🌐 Access the application:"
 echo "   Frontend: http://localhost:3000"
 echo "   Backend:  http://localhost:3000/api"
-echo "   Health:   http://localhost:3000/health"
+echo "   Health:   http://localhost:3000/api/health"
 
 echo ""
 echo "📝 To view logs: docker-compose logs -f"

@@ -330,6 +330,18 @@ Be thorough but concise. Provide specific examples and actionable advice based o
 
         } catch (error) {
             console.error('AI Analysis error:', error);
+            const status = typeof error === 'object' && error !== null && 'status' in error
+                ? Number((error as { status?: number }).status)
+                : undefined;
+
+            if (status === 401 || status === 403) {
+                throw new Error('AI provider authentication failed. Check OPENAI_API_KEY and provider access.');
+            }
+
+            if (status === 429) {
+                throw new Error('AI provider rate limit reached. Please retry shortly.');
+            }
+
             throw new Error(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }

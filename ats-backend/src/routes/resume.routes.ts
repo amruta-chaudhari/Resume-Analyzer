@@ -549,8 +549,9 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
         savedJobDescriptionId: savedData.jobDesc.id,
       },
     });
-  } catch (_error: unknown) {
-    res.status(500).json({ error: 'Failed to analyze resume' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to analyze resume';
+    res.status(500).json({ error: message });
   }
 });
 

@@ -1,11 +1,10 @@
 import Queue from 'bull';
-import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { AIService } from '../services/ai.service';
 import { FileStorageService } from '../services/file-storage.service';
 import prisma from '../lib/prisma';
 import { Logger } from '../utils/logger';
-import { AnalysisJobData, AnalysisJobResult, getAnalysisQueue } from '../queues/analysis.queue';
+import { AnalysisJobData, AnalysisJobResult, registerAnalysisJobProcessor } from '../queues/analysis.queue';
 
 const aiService = new AIService();
 const fileStorage = new FileStorageService();
@@ -15,8 +14,6 @@ const fileStorage = new FileStorageService();
  * Attach handlers to the queue
  */
 export const initializeAnalysisJobProcessor = async (): Promise<void> => {
-  const queue = getAnalysisQueue();
-
   // Initialize file storage
   await fileStorage.initialize().catch((err) => {
     Logger.error('Failed to initialize file storage:', err);
@@ -25,7 +22,7 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
   /**
    * Main job processor - handles the AI analysis logic
    */
-  queue.process(async (job: Queue.Job<AnalysisJobData>) => {
+  registerAnalysisJobProcessor(async (job: Queue.Job<AnalysisJobData>) => {
     Logger.info(`Processing analysis job: ${job.id}`);
 
     const { userId, resumeText, jobDescription, jobTitle, selectedModel, temperature, max_tokens, include_reasoning } = job.data;
@@ -172,27 +169,6 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
     }
   });
 
-  /**
-   * Job completion handler
-   */
-  queue.on('completed', (job: Queue.Job) => {
-    Logger.info(`Job ${job.id} completed with result:`, job.returnvalue);
-  });
-
-  /**
-   * Job failure handler
-   */
-  queue.on('failed', (job: Queue.Job, error: Error) => {
-    Logger.error(`Job ${job.id} failed after ${job.attemptsMade} attempts: ${error.message}`);
-  });
-
-  /**
-   * Job retry handler
-   */
-  queue.on('stalled', (job: Queue.Job) => {
-    Logger.warn(`Job ${job.id} stalled and will be retried`);
-  });
-
   Logger.info('Analysis job processor initialized');
 };
 
@@ -202,6 +178,7 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
 async function extractTextFromFile(buffer: Buffer, mimeType: string): Promise<string> {
   try {
     if (mimeType === 'application/pdf') {
+      const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: buffer });
       const data = await parser.getText();
       return data.text;
