@@ -1,0 +1,48 @@
+# ATS Resume Analyzer - Simple Single Container
+FROM node:20-alpine
+
+# Install dependencies
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+
+WORKDIR /app
+
+# Copy everything
+COPY . .
+
+# Install backend dependencies
+WORKDIR /app/ats-backend
+RUN npm install && npx prisma generate
+
+# Build backend
+RUN npm run build
+
+# Install frontend dependencies  
+WORKDIR /app/ats-frontend
+RUN npm install
+
+# Build frontend
+RUN npm run build
+
+# Setup production
+WORKDIR /app/ats-backend
+RUN cp -r ../ats-frontend/build ./public
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV OPENAI_API_KEY=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
+ENV BASE_URL=https://openrouter.ai/api/v1
+ENV ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free
+ENV CORS_ORIGINS=*
+ENV JWT_SECRET=docker-secret-jwt-key
+ENV JWT_REFRESH_SECRET=docker-secret-refresh-key
+ENV DATABASE_URL=file:./data/dev.db
+ENV DATABASE_PROVIDER=sqlite
+
+RUN mkdir -p /app/ats-backend/data /app/ats-backend/uploads
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+CMD ["node", "dist/index.js"]
