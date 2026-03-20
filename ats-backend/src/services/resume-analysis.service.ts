@@ -4,8 +4,21 @@
  */
 
 import { safeJsonParse } from '../lib/json';
+import { extractTextFromStructuredData } from '../utils/resume-text-extractor';
+
+import OpenAI from 'openai';
 
 export class ResumeAnalysisService {
+  /**
+   * Extracts readable text from structured resume data
+   * Delegates to shared utility for consistency across services
+   * @param data - Structured resume data object
+   * @returns Plain text representation of the resume
+   */
+  extractTextFromStructuredData(data: any): string {
+    return extractTextFromStructuredData(data);
+  }
+
   /**
    * Parses resume text using AI to extract structured data
    * @param text - Resume text to parse
@@ -14,9 +27,6 @@ export class ResumeAnalysisService {
    * @throws Error if parsing fails or AI service is unavailable
    */
   async parseResumeWithAI(text: string, userId: string) {
-    // Use OpenRouter configuration like the existing AI service
-    const OpenAI = require('openai');
-
     const openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
         baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
@@ -70,49 +80,4 @@ export class ResumeAnalysisService {
     }
   }
 
-  /**
-   * Extracts readable text from structured resume data
-   * Used to convert structured data back to plain text format
-   * @param data - Structured resume data object
-   * @returns Plain text representation of the resume
-   */
-  extractTextFromStructuredData(data: any): string {
-    // Extract readable text from structured resume data
-    const sections: string[] = [];
-
-    if (data.personalInfo) {
-      const { fullName, email, phone, location } = data.personalInfo;
-      sections.push(`${fullName || 'Name'}`);
-      if (email) sections.push(`Email: ${email}`);
-      if (phone) sections.push(`Phone: ${phone}`);
-      if (location) sections.push(`Location: ${location}`);
-    }
-
-    if (data.summary) {
-      sections.push(`SUMMARY\n${data.summary}`);
-    }
-
-    if (data.experience && Array.isArray(data.experience)) {
-      sections.push('EXPERIENCE');
-      data.experience.forEach((exp: any) => {
-        sections.push(`${exp.position || 'Position'} at ${exp.company || 'Company'}`);
-        sections.push(`${exp.startDate || 'Start'} - ${exp.endDate || 'Present'}`);
-        if (exp.description) sections.push(exp.description);
-      });
-    }
-
-    if (data.education && Array.isArray(data.education)) {
-      sections.push('EDUCATION');
-      data.education.forEach((edu: any) => {
-        sections.push(`${edu.degree || 'Degree'} from ${edu.school || 'School'}`);
-        if (edu.graduationDate) sections.push(`Graduated: ${edu.graduationDate}`);
-      });
-    }
-
-    if (data.skills && Array.isArray(data.skills)) {
-      sections.push(`SKILLS\n${data.skills.join(', ')}`);
-    }
-
-    return sections.join('\n\n');
-  }
 }

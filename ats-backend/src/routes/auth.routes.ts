@@ -5,7 +5,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth.middleware';
 import { sanitizeEmail, sanitizeString } from '../utils/sanitizer';
 import prisma from '../lib/prisma';
 
-const router = Router();
+const router: Router = Router();
 const authService = new AuthService();
 
 router.post('/register', [

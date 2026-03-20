@@ -23,18 +23,44 @@ const isAuthRequest = (url = '') => (
 
 let refreshPromise = null;
 
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const isTransientRefreshError = (error) => {
+  const status = error?.response?.status;
+  return !status || status >= 500;
+};
+
+const requestTokenRefresh = async (refreshToken) => {
+  const maxAttempts = 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await axios.post(
+        `${API_BASE_URL}/api/auth/refresh`,
+        { refreshToken },
+        { timeout: 10000 }
+      );
+    } catch (error) {
+      if (attempt >= maxAttempts || !isTransientRefreshError(error)) {
+        throw error;
+      }
+
+      await sleep(250 * attempt);
+    }
+  }
+
+  throw new Error('Failed to refresh session');
+};
+
 // Request interceptor - add token
 apiClient.interceptors.request.use(
   (config) => {
     const token = useAuthStore.getState().accessToken;
-    // console.log('Access token from store:', token ? 'present' : 'null/undefined');
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      // console.log('Authorization header set');
-    } else {
-      // console.log('No token available, request will be unauthenticated');
     }
-    // console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    
     return config;
   },
   (error) => {
@@ -66,14 +92,16 @@ apiClient.interceptors.response.use(
         }
 
         if (!refreshPromise) {
-          refreshPromise = axios.post(`${API_BASE_URL}/api/auth/refresh`, {
-            refreshToken,
-          });
+          refreshPromise = requestTokenRefresh(refreshToken);
         }
 
         const response = await refreshPromise;
 
-        const { tokens } = response.data.data;
+        const tokens = response?.data?.data?.tokens;
+        if (!tokens?.accessToken || !tokens?.refreshToken) {
+          throw new Error('Invalid refresh response');
+        }
+
         useAuthStore.getState().setAuth(
           useAuthStore.getState().user,
           tokens.accessToken,
@@ -90,6 +118,7 @@ apiClient.interceptors.response.use(
         const refreshStatus = refreshError?.response?.status;
         const shouldClearAuth =
           refreshError?.message === 'Missing refresh token' ||
+          refreshError?.message === 'Invalid refresh response' ||
           refreshStatus === 400 ||
           refreshStatus === 401 ||
           refreshStatus === 403;

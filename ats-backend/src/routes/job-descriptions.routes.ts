@@ -22,7 +22,7 @@ import {
 } from '../utils/pagination';
 import type { JobDescriptionPayload } from '../types/index';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * Standard error response helper
@@ -159,7 +159,8 @@ router.get('/job-descriptions', authMiddleware, async (req: AuthRequest, res: Re
             req.query.page as string | number | undefined,
             req.query.limit as string | number | undefined
         );
-        const search = req.query.search as string | undefined;
+        const searchParam = req.query.search as string;
+      const search = searchParam ? searchParam.trim().toLowerCase() : undefined;
         const sortBy = validateSortField(
             req.query.sortBy as string | undefined,
             ['createdAt', 'updatedAt'],
@@ -275,7 +276,7 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
 
         const jobDescription = await prisma.jobDescription.findFirst({
             where: {
-                id: req.params.id,
+                id: (req.params.id as string),
                 userId: req.userId,
                 deletedAt: null
             }
@@ -289,7 +290,7 @@ router.put('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, res
         }
 
         const updatedJobDescription = await prisma.jobDescription.update({
-            where: { id: req.params.id },
+            where: { id: (req.params.id as string) },
             data: {
                 ...payload,
             }
@@ -327,7 +328,7 @@ router.delete('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, 
 
         const jobDescription = await prisma.jobDescription.findFirst({
             where: {
-                id: req.params.id,
+                id: (req.params.id as string),
                 userId: req.userId,
                 deletedAt: null
             }
@@ -341,7 +342,7 @@ router.delete('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, 
         }
 
         await prisma.jobDescription.update({
-            where: { id: req.params.id },
+            where: { id: (req.params.id as string) },
             data: { deletedAt: new Date() }
         });
 

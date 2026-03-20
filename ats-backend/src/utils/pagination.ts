@@ -177,12 +177,14 @@ export function buildResumeWhereClause(
   }
 
   // Search in title or extractedText
+  // Note: SQLite does not support mode: 'insensitive' in Prisma.
+  // SQLite's LIKE is case-insensitive for ASCII by default.
   if (filters?.search) {
     const searchTerm = filters.search.trim();
     if (searchTerm.length > 0) {
       where.OR = [
-        { title: { contains: searchTerm, mode: 'insensitive' } },
-        { extractedText: { contains: searchTerm, mode: 'insensitive' } },
+        { title: { contains: searchTerm } },
+        { extractedText: { contains: searchTerm } },
       ];
     }
   }

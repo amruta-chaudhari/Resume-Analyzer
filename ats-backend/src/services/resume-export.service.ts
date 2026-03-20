@@ -5,6 +5,8 @@
 
 import prisma from '../lib/prisma';
 import { safeJsonParse } from '../lib/json';
+import puppeteer from 'puppeteer';
+import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx';
 
 export class ResumeExportService {
   /**
@@ -55,12 +57,10 @@ export class ResumeExportService {
     const html = this.generateFormattedHTML(structuredContent, resume.template);
 
     // Convert HTML to PDF using puppeteer
-    const puppeteer = require('puppeteer');
-
     let browser;
     try {
       browser = await puppeteer.launch({
-        headless: 'new', // Use new headless mode
+        headless: true, // Use new headless mode
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -106,7 +106,7 @@ export class ResumeExportService {
         throw new Error('Generated PDF is empty');
       }
 
-      return pdfBuffer;
+      return Buffer.from(pdfBuffer);
     } catch (error) {
       throw new Error(`Failed to generate PDF: ${(error as any).message}`);
     } finally {
@@ -149,8 +149,6 @@ export class ResumeExportService {
       }
 
       const { personalInfo, summary, experience, education, skills } = structuredResume;
-
-      const { Document, Packer, Paragraph, TextRun, AlignmentType } = require('docx');
 
       const doc = new Document({
         sections: [{

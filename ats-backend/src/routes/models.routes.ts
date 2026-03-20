@@ -9,7 +9,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../lib/prisma';
 import type { AIModel, ApiResponse } from '../types/index';
 
-const router = Router();
+const router: Router = Router();
 const aiService = new AIService();
 
 /**

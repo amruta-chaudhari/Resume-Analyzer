@@ -29,9 +29,19 @@ let modelCache: ModelCache = {
     lastFetched: null,
     isLoading: false
 };
+let modelFetchPromise: Promise<AIModel[]> | null = null;
 
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'google/gemini-2.0-flash-exp:free';
+const AI_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '60000', 10);
+const AI_MAX_RETRIES = Number.parseInt(process.env.AI_MAX_RETRIES || '2', 10);
+
+const REQUEST_TIMEOUT_MS = Number.isFinite(AI_REQUEST_TIMEOUT_MS) && AI_REQUEST_TIMEOUT_MS > 0
+    ? AI_REQUEST_TIMEOUT_MS
+    : 60000;
+const MAX_RETRIES = Number.isFinite(AI_MAX_RETRIES) && AI_MAX_RETRIES >= 0
+    ? AI_MAX_RETRIES
+    : 2;
 
 export class AIService {
     // Basic formatting analysis based on text patterns
@@ -115,49 +125,50 @@ export class AIService {
         }
 
         // Prevent multiple simultaneous requests
-        if (modelCache.isLoading) {
-            // Wait for existing request to complete
-            while (modelCache.isLoading) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            return modelCache.data;
+        if (modelFetchPromise) {
+            return modelFetchPromise;
         }
 
         modelCache.isLoading = true;
 
-        try {
-            const response = await axios.get('https://openrouter.ai/api/v1/models');
+        modelFetchPromise = (async () => {
+            try {
+                const response = await axios.get('https://openrouter.ai/api/v1/models');
 
-            // Filter and format models
-            const models: AIModel[] = response.data.data
-                .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
-                .map((model: AIModel) => ({
-                    id: model.id,
-                    name: model.name || model.id,
-                    provider: model.id.split('/')[0],
-                    context_length: model.context_length || 4096,
-                    supported_parameters: model.supported_parameters || [],
-                    per_request_limits: model.per_request_limits,
-                    pricing: model.pricing,
-                    created: model.created,
-                    description: model.description || '',
-                    architecture: model.architecture,
-                }));
+                // Filter and format models
+                const models: AIModel[] = response.data.data
+                    .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
+                    .map((model: AIModel) => ({
+                        id: model.id,
+                        name: model.name || model.id,
+                        provider: model.id.split('/')[0],
+                        context_length: model.context_length || 4096,
+                        supported_parameters: model.supported_parameters || [],
+                        per_request_limits: model.per_request_limits,
+                        pricing: model.pricing,
+                        created: model.created,
+                        description: model.description || '',
+                        architecture: model.architecture,
+                    }));
 
-            modelCache.data = models;
-            modelCache.lastFetched = now;
+                modelCache.data = models;
+                modelCache.lastFetched = Date.now();
 
-            return models;
-        } catch (error) {
-            console.error('Error fetching models:', error);
-            // Return cached data if available, even if expired
-            if (modelCache.data.length > 0) {
-                return modelCache.data;
+                return models;
+            } catch (error) {
+                console.error('Error fetching models:', error);
+                // Return cached data if available, even if expired
+                if (modelCache.data.length > 0) {
+                    return modelCache.data;
+                }
+                throw error;
+            } finally {
+                modelCache.isLoading = false;
+                modelFetchPromise = null;
             }
-            throw error;
-        } finally {
-            modelCache.isLoading = false;
-        }
+        })();
+
+        return modelFetchPromise;
     }
 
     async refreshModelsCache(): Promise<AIModel[]> {
@@ -322,7 +333,8 @@ Be thorough but concise. Provide specific examples and actionable advice based o
             const analysisResult = JSON.parse(jsonString) as AnalysisResult;
 
             // Ensure the response has the expected structure
-            if (!analysisResult.overallScore || !analysisResult.skillsAnalysis || !analysisResult.formattingScore) {
+            // Note: Use == null to catch both null and undefined, since overallScore of 0 is valid
+            if (analysisResult.overallScore == null || !analysisResult.skillsAnalysis || !analysisResult.formattingScore) {
                 throw new Error('Invalid response format from AI model');
             }
 

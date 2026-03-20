@@ -28,7 +28,7 @@ import type {
 import { Logger } from '../utils/logger';
 import { sanitizeJobDescription, sanitizeJobTitle } from '../utils/sanitizer';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * Admin authorization helper
@@ -131,6 +131,13 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             return res.status(400).json({
                 success: false,
                 error: 'Job description must be at least 30 characters'
+            });
+        }
+
+        if (jobDescription.length > 15000) {
+            return res.status(400).json({
+                success: false,
+                error: 'Job description is too long (maximum 15,000 characters)'
             });
         }
 
@@ -298,7 +305,7 @@ router.get('/analyses/:id', authMiddleware, async (req: AuthRequest, res: Respon
 
         const analysis = await prisma.analysis.findFirst({
             where: {
-                id: req.params.id,
+                id: (req.params.id as string),
                 userId: req.userId
             },
             include: {
@@ -366,7 +373,7 @@ router.get('/analysis/:jobId/status', authMiddleware, async (req: AuthRequest, r
 
         const { jobId } = req.params;
 
-        const jobStatus = await getJobStatus(jobId);
+        const jobStatus = await getJobStatus(jobId as string);
 
         if (!jobStatus) {
             return res.status(404).json({

@@ -1,5 +1,6 @@
 import mammoth from 'mammoth';
 import { FileStorageService, FileMetadata } from './file-storage.service';
+import { extractTextFromStructuredData as sharedExtractText } from '../utils/resume-text-extractor';
 
 export interface ProcessedResume {
   text: string;
@@ -101,43 +102,7 @@ export class ResumeFileService {
   }
 
   private extractTextFromStructuredData(data: any): string {
-    // Extract readable text from structured resume data
-    const sections: string[] = [];
-
-    if (data.personalInfo) {
-      const { fullName, email, phone, location } = data.personalInfo;
-      sections.push(`${fullName || 'Name'}`);
-      if (email) sections.push(`Email: ${email}`);
-      if (phone) sections.push(`Phone: ${phone}`);
-      if (location) sections.push(`Location: ${location}`);
-    }
-
-    if (data.summary) {
-      sections.push(`SUMMARY\n${data.summary}`);
-    }
-
-    if (data.experience && Array.isArray(data.experience)) {
-      sections.push('EXPERIENCE');
-      data.experience.forEach((exp: any) => {
-        sections.push(`${exp.position || 'Position'} at ${exp.company || 'Company'}`);
-        sections.push(`${exp.startDate || 'Start'} - ${exp.endDate || 'Present'}`);
-        if (exp.description) sections.push(exp.description);
-      });
-    }
-
-    if (data.education && Array.isArray(data.education)) {
-      sections.push('EDUCATION');
-      data.education.forEach((edu: any) => {
-        sections.push(`${edu.degree || 'Degree'} from ${edu.school || 'School'}`);
-        if (edu.graduationDate) sections.push(`Graduated: ${edu.graduationDate}`);
-      });
-    }
-
-    if (data.skills && Array.isArray(data.skills)) {
-      sections.push(`SKILLS\n${data.skills.join(', ')}`);
-    }
-
-    return sections.join('\n\n');
+    return sharedExtractText(data);
   }
 
   async getResumeFile(fileId: string, userId: string): Promise<Buffer | null> {

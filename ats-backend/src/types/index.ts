@@ -282,7 +282,6 @@ export interface ResumeUpdateRequestBody {
   content?: string;
   templateId?: string | null;
   structuredData?: string | Record<string, any> | null;
-  [key: string]: any; // Allow extra fields for validation
 }
 
 export interface ResumeAnalyzeRequestBody {

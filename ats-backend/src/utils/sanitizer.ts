@@ -122,14 +122,21 @@ export function sanitizeEmail(email: string | undefined | null): string {
     return '';
   }
 
-  const sanitized = sanitizeString(email);
+  const trimmed = email.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  if (!emailRegex.test(sanitized)) {
+  if (!emailRegex.test(trimmed)) {
     return '';
   }
 
-  return sanitized.toLowerCase();
+  // Ensure there are no HTML entities or dangerous characters
+  // by checking if sanitization alters the string
+  const sanitized = sanitizeString(trimmed);
+  if (sanitized !== trimmed) {
+    return '';
+  }
+
+  return trimmed.toLowerCase();
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { resumeUploadsPerMonthLimiter, analysesPerDayLimiter } from '../middleware/rate-limiter.middleware';
@@ -34,7 +34,7 @@ import type {
   AnalysisResult,
 } from '../types/index';
 
-const router = Router();
+const router: Router = Router();
 
 const parseModelParameters = (body: any): ModelParameters => {
   const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
@@ -144,8 +144,33 @@ const upload = multer({
   },
 });
 
-// Initialize file storage
-fileStorage.initialize().catch(console.error);
+let isFileStorageReady = false;
+let fileStorageInitializationError: Error | null = null;
+
+const fileStorageInitializationPromise = fileStorage.initialize()
+  .then(() => {
+    isFileStorageReady = true;
+  })
+  .catch((error: unknown) => {
+    fileStorageInitializationError = error instanceof Error ? error : new Error(String(error));
+    console.error('Failed to initialize file storage:', fileStorageInitializationError);
+  });
+
+const ensureFileStorageReady = async (_req: Request, res: Response, next: NextFunction) => {
+  if (!isFileStorageReady && !fileStorageInitializationError) {
+    await fileStorageInitializationPromise;
+  }
+
+  if (isFileStorageReady) {
+    return next();
+  }
+
+  return res.status(503).json({
+    error: 'File storage service is unavailable. Please try again shortly.',
+  });
+};
+
+router.use(ensureFileStorageReady);
 
 // All routes require authentication
 router.use(authMiddleware);
@@ -304,7 +329,7 @@ router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (r
 // GET /api/resumes/:id
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const resume = await resumeService.getResumeById(req.params.id, req.userId!);
+    const resume = await resumeService.getResumeById(req.params.id as string, req.userId!);
     res.json({ success: true, data: { resume } });
   } catch (error: unknown) {
     const err = error as Error;
@@ -321,7 +346,7 @@ const updateResumeHandler = async (req: AuthRequest, res: Response) => {
     const normalizedPayload = normalizeResumeUpdatePayload(req.body);
 
     const resume = await resumeService.updateResume(
-      req.params.id,
+      req.params.id as string,
       req.userId!,
       normalizedPayload
     );
@@ -349,7 +374,7 @@ router.put('/:id', updateResumeHandler);
 // DELETE /api/resumes/:id
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    await resumeService.deleteResume(req.params.id, req.userId!);
+    await resumeService.deleteResume(req.params.id as string, req.userId!);
     res.status(204).send();
   } catch (error: unknown) {
     const err = error as Error;
@@ -364,13 +389,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 // GET /api/resumes/:id/file - Download original resume file
 router.get('/:id/file', async (req: AuthRequest, res: Response) => {
   try {
-    const fileBuffer = await resumeService.getResumeFile(req.params.id, req.userId!);
+    const fileBuffer = await resumeService.getResumeFile(req.params.id as string, req.userId!);
 
     if (!fileBuffer) {
       return res.status(404).json({ error: 'Original file not found' });
     }
 
-    const metadata = await resumeService.getResumeFileMetadata(req.params.id, req.userId!);
+    const metadata = await resumeService.getResumeFileMetadata(req.params.id as string, req.userId!);
 
     if (!metadata) {
       return res.status(404).json({ error: 'File metadata not found' });
@@ -388,7 +413,7 @@ router.get('/:id/file', async (req: AuthRequest, res: Response) => {
 // GET /api/resumes/:id/file/metadata - Get file metadata
 router.get('/:id/file/metadata', async (req: AuthRequest, res: Response) => {
   try {
-    const metadata = await resumeService.getResumeFileMetadata(req.params.id, req.userId!);
+    const metadata = await resumeService.getResumeFileMetadata(req.params.id as string, req.userId!);
 
     if (!metadata) {
       return res.status(404).json({ error: 'File metadata not found' });
@@ -403,7 +428,7 @@ router.get('/:id/file/metadata', async (req: AuthRequest, res: Response) => {
 // GET /api/resumes/:id/export/pdf
 router.get('/:id/export/pdf', async (req: AuthRequest, res: Response) => {
   try {
-    const pdfBuffer = await resumeService.exportToPDF(req.params.id, req.userId!);
+    const pdfBuffer = await resumeService.exportToPDF(req.params.id as string, req.userId!);
 
     // Set headers for binary response
     res.setHeader('Content-Type', 'application/pdf');
@@ -423,7 +448,7 @@ router.get('/:id/export/pdf', async (req: AuthRequest, res: Response) => {
 // GET /api/resumes/:id/export/word
 router.get('/:id/export/word', async (req: AuthRequest, res: Response) => {
   try {
-    const wordBuffer = await resumeService.exportToWord(req.params.id, req.userId!);
+    const wordBuffer = await resumeService.exportToWord(req.params.id as string, req.userId!);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="resume-${req.params.id}.docx"`);
@@ -468,7 +493,7 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     }
 
     const resume = await prisma.resume.findFirst({
-      where: { id: req.params.id, userId: req.userId!, deletedAt: null },
+      where: { id: req.params.id as string, userId: req.userId!, deletedAt: null },
       select: {
         id: true,
         title: true,
@@ -495,7 +520,7 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
       modelParameters
     );
 
-    const savedData = await prisma.$transaction(async (tx) => {
+    const savedData = await prisma.$transaction(async (tx: any) => {
       let jobDesc = await tx.jobDescription.findFirst({
         where: {
           userId: req.userId!,
@@ -559,9 +584,9 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
 router.get('/:id/preview', async (req: AuthRequest, res: Response) => {
   try {
     const resume = await prisma.resume.findFirst({
-      where: { id: req.params.id, userId: req.userId!, deletedAt: null },
+      where: { id: req.params.id as string, userId: req.userId!, deletedAt: null },
       include: { template: true },
-    });
+    }) as any;
 
     if (!resume) {
       return res.status(404).json({ error: 'Resume not found' });

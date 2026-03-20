@@ -3,7 +3,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { TemplateService } from '../services/template.service';
 import prisma from '../lib/prisma';
 
-const router = Router();
+const router: Router = Router();
 const templateService = new TemplateService();
 
 // All routes require authentication
@@ -23,7 +23,7 @@ router.get('/', async (req: AuthRequest, res) => {
 // GET /api/templates/:id
 router.get('/:id', async (req: AuthRequest, res) => {
   try {
-    const template = await templateService.getTemplateById(req.params.id);
+    const template = await templateService.getTemplateById((req.params.id as string));
     res.json({ success: true, data: template });
   } catch (error: any) {
     if (error.message === 'Template not found') {
@@ -42,7 +42,7 @@ router.post('/seed', async (req: AuthRequest, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: req.userId },
+      where: { id: req.userId as string }, // Fixed param cast for req.userId
       select: { subscriptionTier: true },
     });
 
