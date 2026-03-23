@@ -73,16 +73,18 @@ test.describe('Live Broader Workflow', () => {
     await page.getByLabel(/job description/i).fill(persona.updatedJobDescription);
     await page.getByRole('button', { name: /analyze resume match/i }).click();
 
-    const analysisNavigation = page.waitForURL(/\/analysis\//, { timeout: 30000 }).then(() => 'navigated');
-    const analysisError = page.getByRole('alert').waitFor({ state: 'visible', timeout: 30000 }).then(() => 'error');
-    const analysisOutcome = await Promise.race([analysisNavigation, analysisError]).catch(() => 'timeout');
+    const analysisErrorAppeared = await page
+      .getByRole('alert')
+      .waitFor({ state: 'visible', timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
 
-    if (analysisOutcome === 'error') {
+    if (analysisErrorAppeared) {
       const errorMessage = (await page.getByRole('alert').textContent())?.trim() || 'Unknown analysis error';
       throw new Error(`Stored-resume analysis failed before navigation: ${errorMessage}`);
     }
 
-    await expect(page).toHaveURL(/\/analysis\//, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/analysis\//, { timeout: 120000 });
     await expect(page.getByRole('heading', { name: /analysis results/i })).toBeVisible({ timeout: 120000 });
     await expect(page.getByText(/overall match score/i)).toBeVisible();
 

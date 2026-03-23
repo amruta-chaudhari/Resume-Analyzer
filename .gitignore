@@ -89,3 +89,5 @@ ats-backend/uploads/
 ats-frontend/test-results/
 ats-frontend/playwright-report/
 ats-frontend/blob-report/
+
+docs/presentation/
