@@ -1,7 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'node:path';
-import { authRoutes, healthRoutes } from '../src/routes/index';
+import { authRoutes, healthRoutes, adminRoutes } from '../src/routes/index';
 import { errorHandler, notFoundHandler } from '../src/middleware/error.middleware';
 
 const backendDir = path.resolve(__dirname, '..');
@@ -19,6 +19,7 @@ export const createPlaywrightApp = () => {
 
   app.use('/api/auth', authRoutes);
   app.use('/api', healthRoutes);
+  app.use('/api/admin', adminRoutes);
 
   app.use(express.static(buildDir));
 

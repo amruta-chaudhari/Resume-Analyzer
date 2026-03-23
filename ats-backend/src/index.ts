@@ -9,6 +9,7 @@ import {
   jobDescriptionsRoutes,
   healthRoutes,
   templateRoutes,
+  adminRoutes,
 } from './routes/index';
 import { authMiddleware } from './middleware/auth.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
@@ -122,6 +123,7 @@ app.use('/api/auth', authLimiter);
 app.use('/api/analyze', analyzeLimiter);
 app.use('/api/models/refresh', adminLimiter);
 app.use('/api/templates/seed', adminLimiter);
+app.use('/api/admin', adminLimiter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err.message === 'Not allowed by CORS') {
@@ -143,6 +145,7 @@ app.use('/api', modelsRoutes); // GET /models, POST /models/refresh
 app.use('/api', analysisRoutes); // POST /analyze, GET /analyses, GET /analysis/:jobId/status, GET /queue/stats
 app.use('/api', jobDescriptionsRoutes); // GET/POST/PUT/DELETE /job-descriptions
 app.use('/api', healthRoutes); // GET /health, GET /health/upstream
+app.use('/api/admin', adminRoutes);
 
 // Legacy health check endpoint (kept for backward compatibility)
 app.get('/health-legacy', (req, res) => {

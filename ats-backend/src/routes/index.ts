@@ -10,3 +10,4 @@ export { default as analysisRoutes } from './analysis.routes';
 export { default as jobDescriptionsRoutes } from './job-descriptions.routes';
 export { default as healthRoutes } from './health.routes';
 export { default as templateRoutes } from './template.routes';
+export { default as adminRoutes } from './admin.routes';

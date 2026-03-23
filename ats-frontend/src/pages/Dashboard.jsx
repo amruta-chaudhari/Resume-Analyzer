@@ -12,7 +12,7 @@ import useTheme from '../hooks/useTheme';
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState('');
-  const { clearAuth, updateUser, refreshToken, hasHydrated } = useAuthStore();
+  const { clearAuth, updateUser, refreshToken, hasHydrated, user } = useAuthStore();
   const location = useLocation();
 
   // Model Parameters state
@@ -222,6 +222,16 @@ const Dashboard = () => {
                 Logout
               </button>
             </div>
+            {user?.subscriptionTier === 'admin' && (
+              <div className="mt-4 flex justify-center">
+                <Link
+                  to="/admin"
+                  className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Open Admin Console
+                </Link>
+              </div>
+            )}
             <p className="text-lg sm:text-xl text-gray-700 dark:text-gray-300 font-light">
               Get AI-powered insights on how well your resume matches the job description
             </p>

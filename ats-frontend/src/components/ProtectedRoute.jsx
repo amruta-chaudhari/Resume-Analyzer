@@ -3,11 +3,12 @@ import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import LoadingSpinner from './LoadingSpinner';
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, requireAdmin = false }) => {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const hasSessionToken = useAuthStore((state) => Boolean(state.accessToken || state.refreshToken));
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const user = useAuthStore((state) => state.user);
 
   if (!hasHydrated) {
     return (
@@ -19,6 +20,10 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated || !hasSessionToken) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (requireAdmin && user?.subscriptionTier !== 'admin') {
+    return <Navigate to="/dashboard/analysis" replace state={{ from: location }} />;
   }
 
   return children;

@@ -73,6 +73,8 @@ router.post('/register', [
           email: result.user.email,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
+          subscriptionTier: result.user.subscriptionTier,
+          emailVerified: result.user.emailVerified,
         },
         tokens: {
           accessToken: result.accessToken,
@@ -109,6 +111,8 @@ router.post('/login', [
           email: result.user.email,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
+          subscriptionTier: result.user.subscriptionTier,
+          emailVerified: result.user.emailVerified,
         },
         tokens: {
           accessToken: result.accessToken,
