@@ -8,6 +8,8 @@ import { extractTextFromStructuredData } from '../utils/resume-text-extractor';
 
 import OpenAI from 'openai';
 
+const AI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
+
 export class ResumeAnalysisService {
   /**
    * Extracts readable text from structured resume data
@@ -28,7 +30,7 @@ export class ResumeAnalysisService {
    */
   async parseResumeWithAI(text: string, userId: string) {
     const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: AI_API_KEY,
         baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
     });
 

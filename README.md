@@ -131,9 +131,29 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
    ```
 
 4. **Open the app**
-   - Frontend: http://localhost:3000
+   - Frontend: http://localhost:5173
    - Backend API: http://localhost:3001
-   - Health Check: http://localhost:3001/health
+   - Health Check: http://localhost:3001/api/health
+
+---
+
+## 🐳 Docker
+
+Container usage is documented here:
+
+- [Docker Guide](docs/DOCKER.md)
+- [Docker TL;DR](docs/DOCKER_TLDR.md)
+
+Quick start:
+
+```bash
+cp .env.docker.example .env.docker
+# Edit .env.docker and add your OpenRouter key and JWT secrets
+# If port 3000 is already in use locally, change APP_HOST_PORT in .env.docker
+
+docker compose --env-file .env.docker up --build -d
+curl http://localhost:3000/api/health
+```
 
 ---
 
@@ -155,12 +175,14 @@ JWT_SECRET=your-super-secret-jwt-key
 JWT_REFRESH_SECRET=your-super-secret-refresh-key
 
 # OpenRouter AI API
-OPENAI_API_KEY=your-openrouter-api-key
+OPENROUTER_API_KEY=your-openrouter-api-key
+# Optional legacy alias
+OPENAI_API_KEY=
 BASE_URL=https://openrouter.ai/api/v1
 ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free
 
 # Comma-separated allowed frontend origins
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
 
 # Server
 PORT=3001

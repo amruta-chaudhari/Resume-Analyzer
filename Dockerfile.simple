@@ -1,48 +1,58 @@
-# ATS Resume Analyzer - Simple Single Container
 FROM node:20-alpine
 
-# Install dependencies
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    NODE_ENV=production \
+    PORT=3000 \
+    BASE_URL=https://openrouter.ai/api/v1 \
+    ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free \
+    CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000 \
+    DATABASE_URL=file:./data/dev.db \
+    DATABASE_PROVIDER=sqlite \
+    QUEUE_PROVIDER=memory
 
 WORKDIR /app
 
-# Copy everything
-COPY . .
-
-# Install backend dependencies
+COPY ats-backend/package*.json ./ats-backend/
 WORKDIR /app/ats-backend
-RUN npm install && npx prisma generate
+RUN npm ci
 
-# Build backend
+COPY ats-backend/tsconfig.json ./
+COPY ats-backend/prisma ./prisma
+COPY ats-backend/src ./src
+COPY ats-backend/docker-entrypoint.sh ./docker-entrypoint.sh
+
+RUN npx prisma generate
 RUN npm run build
 
-# Install frontend dependencies  
 WORKDIR /app/ats-frontend
-RUN npm install
+COPY ats-frontend/package*.json ./
+RUN npm ci
 
-# Build frontend
+COPY ats-frontend/index.html ./
+COPY ats-frontend/vite.config.js ./
+COPY ats-frontend/tailwind.config.cjs ./
+COPY ats-frontend/postcss.config.cjs ./
+COPY ats-frontend/public ./public
+COPY ats-frontend/src ./src
+
 RUN npm run build
 
-# Setup production
 WORKDIR /app/ats-backend
-RUN mkdir -p ./build && cp -r ../ats-frontend/build/* ./build/
-
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV OPENAI_API_KEY=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
-ENV BASE_URL=https://openrouter.ai/api/v1
-ENV ANALYSIS_MODEL=openrouter/free
-ENV CORS_ORIGINS=*
-ENV JWT_SECRET=docker-secret-jwt-key
-ENV JWT_REFRESH_SECRET=docker-secret-refresh-key
-ENV DATABASE_URL=file:./data/dev.db
-ENV DATABASE_PROVIDER=sqlite
-
-RUN mkdir -p /app/ats-backend/data /app/ats-backend/uploads
+RUN chmod +x ./docker-entrypoint.sh \
+    && mkdir -p ./build ./data ./uploads \
+    && cp -r /app/ats-frontend/build/. ./build/
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

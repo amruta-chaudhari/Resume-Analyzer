@@ -59,8 +59,10 @@ export class ResumeExportService {
     // Convert HTML to PDF using puppeteer
     let browser;
     try {
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
       browser = await puppeteer.launch({
         headless: true, // Use new headless mode
+        executablePath: executablePath || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

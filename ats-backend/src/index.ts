@@ -34,10 +34,20 @@ if (missingEnvVars.length > 0) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-const defaultCorsOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
-const configuredCorsOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-  : defaultCorsOrigins;
+const defaultCorsOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+const configuredCorsOrigins = Array.from(new Set([
+  ...defaultCorsOrigins,
+  ...(process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : []),
+]));
 
 type HitBucket = {
   count: number;

@@ -13,10 +13,11 @@ import type {
 
 // Lazy initialization of OpenAI client
 let _openai: OpenAI | null = null;
+const AI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
 const getOpenAIClient = (): OpenAI => {
   if (!_openai) {
     _openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: AI_API_KEY,
       baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
     });
   }
@@ -347,7 +348,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 : undefined;
 
             if (status === 401 || status === 403) {
-                throw new Error('AI provider authentication failed. Check OPENAI_API_KEY and provider access.');
+                throw new Error('AI provider authentication failed. Check OPENROUTER_API_KEY or OPENAI_API_KEY and provider access.');
             }
 
             if (status === 429) {

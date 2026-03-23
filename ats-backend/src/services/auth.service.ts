@@ -1,40 +1,67 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createHash, randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { AuthenticationError, ConflictError, InvalidCredentialsError } from '../utils/errors';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class AuthService {
   private lastPruneRun = 0;
 
+  private async runTransaction<T>(
+    callback: (client: Prisma.TransactionClient | typeof prisma) => Promise<T>
+  ): Promise<T> {
+    if (typeof prisma.$transaction === 'function') {
+      return (await (prisma as any).$transaction(
+        async (tx: Prisma.TransactionClient) => callback(tx)
+      )) as T;
+    }
+
+    return callback(prisma as Prisma.TransactionClient | typeof prisma);
+  }
+
   async register(email: string, password: string, firstName?: string, lastName?: string) {
     await this.pruneRefreshSessions();
 
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      throw new Error('User already exists');
+    try {
+      return await this.runTransaction(async (tx) => {
+        const existingUser = await tx.user.findUnique({ where: { email } });
+        if (existingUser) {
+          throw new ConflictError('User already exists', { email });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        const user = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            firstName,
+            lastName,
+          },
+        });
+
+        const accessToken = this.generateAccessToken(user.id, email);
+        const refreshSession = await this.createRefreshSession(user.id, tx);
+
+        return { user, accessToken, refreshToken: refreshSession.token };
+      });
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        throw error;
+      }
+
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictError('User already exists', { email });
+      }
+
+      throw error;
     }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        firstName,
-        lastName,
-      },
-    });
-
-    // Generate tokens
-    const accessToken = this.generateAccessToken(user.id, email);
-    const refreshSession = await this.createRefreshSession(user.id);
-
-    return { user, accessToken, refreshToken: refreshSession.token };
   }
 
   async login(email: string, password: string) {
@@ -43,13 +70,13 @@ export class AuthService {
     // Find user
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || user.deletedAt) {
-      throw new Error('Invalid credentials');
+      throw new InvalidCredentialsError('Invalid credentials');
     }
 
     // Verify password
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
-      throw new Error('Invalid credentials');
+      throw new InvalidCredentialsError('Invalid credentials');
     }
 
     // Update last login
@@ -66,13 +93,13 @@ export class AuthService {
   }
 
   async refreshToken(refreshToken: string) {
-    try {
-      await this.pruneRefreshSessions();
+    await this.pruneRefreshSessions();
 
+    try {
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
 
       if (!decoded?.userId || !decoded?.sessionId) {
-        throw new Error('Invalid refresh token');
+        throw new AuthenticationError('Invalid refresh token');
       }
 
       const tokenHash = this.hashToken(refreshToken);
@@ -82,17 +109,17 @@ export class AuthService {
       });
 
       if (!currentSession || currentSession.userId !== decoded.userId) {
-        throw new Error('Invalid refresh token');
+        throw new AuthenticationError('Invalid refresh token');
       }
 
       if (currentSession.revokedAt) {
         await this.revokeAllRefreshSessions(currentSession.userId);
-        throw new Error('Refresh token reuse detected');
+        throw new AuthenticationError('Refresh token reuse detected');
       }
 
       if (currentSession.tokenHash !== tokenHash) {
         await this.revokeAllRefreshSessions(currentSession.userId);
-        throw new Error('Invalid refresh token');
+        throw new AuthenticationError('Invalid refresh token');
       }
 
       if (currentSession.expiresAt <= new Date()) {
@@ -103,7 +130,7 @@ export class AuthService {
             lastUsedAt: new Date(),
           },
         });
-        throw new Error('Refresh token expired');
+        throw new AuthenticationError('Refresh token expired');
       }
 
       const user = await prisma.user.findUnique({
@@ -115,7 +142,7 @@ export class AuthService {
         if (user?.id) {
           await this.revokeAllRefreshSessions(user.id);
         }
-        throw new Error('User not found');
+        throw new AuthenticationError('User not found');
       }
 
       const accessToken = this.generateAccessToken(user.id, user.email);
@@ -132,7 +159,16 @@ export class AuthService {
 
       return { accessToken, refreshToken: newSession.token };
     } catch (error) {
-      throw new Error('Invalid refresh token');
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+
+      const errorName = error instanceof Error ? error.name : '';
+      if (errorName === 'TokenExpiredError' || errorName === 'JsonWebTokenError' || errorName === 'NotBeforeError') {
+        throw new AuthenticationError('Invalid refresh token');
+      }
+
+      throw error;
     }
   }
 
@@ -209,12 +245,15 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private async createRefreshSession(userId: string): Promise<{ token: string; sessionId: string }> {
+  private async createRefreshSession(
+    userId: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<{ token: string; sessionId: string }> {
     const sessionId = randomUUID();
     const token = this.generateRefreshToken(userId, sessionId);
     const tokenHash = this.hashToken(token);
 
-    await prisma.refreshSession.create({
+    await client.refreshSession.create({
       data: {
         id: sessionId,
         userId,

@@ -16,7 +16,7 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const redirectTarget = location.state?.from || '/dashboard';
+  const redirectTarget = location.state?.from?.pathname || location.state?.from || '/dashboard';
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated && hasSessionToken) {
@@ -66,6 +66,7 @@ const Login = () => {
             <input
               type="email"
               id="login-email"
+              name="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
@@ -82,6 +83,7 @@ const Login = () => {
             <input
               type="password"
               id="login-password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"

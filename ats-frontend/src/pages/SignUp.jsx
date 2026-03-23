@@ -21,7 +21,7 @@ const SignUp = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const redirectTarget = location.state?.from || '/dashboard';
+  const redirectTarget = location.state?.from?.pathname || location.state?.from || '/dashboard';
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated && hasSessionToken) {
@@ -102,6 +102,7 @@ const SignUp = () => {
                 onChange={handleChange}
                 className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
                 placeholder="John"
+                autoComplete="given-name"
                 required
               />
             </div>
@@ -117,6 +118,7 @@ const SignUp = () => {
                 onChange={handleChange}
                 className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
                 placeholder="Doe"
+                autoComplete="family-name"
                 required
               />
             </div>
@@ -134,6 +136,7 @@ const SignUp = () => {
               onChange={handleChange}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
               placeholder="you@example.com"
+              autoComplete="email"
               required
             />
           </div>
@@ -150,6 +153,7 @@ const SignUp = () => {
               onChange={handleChange}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
               placeholder="••••••••"
+              autoComplete="new-password"
               required
             />
           </div>
@@ -166,6 +170,7 @@ const SignUp = () => {
               onChange={handleChange}
               className="w-full px-4 py-3 glass rounded-xl border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/20"
               placeholder="••••••••"
+              autoComplete="new-password"
               required
             />
           </div>

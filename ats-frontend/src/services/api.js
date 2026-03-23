@@ -2,7 +2,9 @@ import axios from 'axios';
 import useAuthStore from '../stores/authStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || (
-  typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'
+  import.meta.env.DEV ? 'http://localhost:3001' : (
+    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'
+  )
 );
 
 // Create axios instance with default configuration
@@ -164,6 +166,9 @@ apiClient.interceptors.response.use(
         case 404:
           throw new Error('The requested resource was not found.');
         case 409:
+          if (requestUrl.includes('/api/auth/register')) {
+            throw new Error(data?.error || 'An account with this email already exists.');
+          }
           throw new Error('This item already exists.');
         case 422:
           throw new Error('Please check your input and try again.');
@@ -171,6 +176,8 @@ apiClient.interceptors.response.use(
           throw new Error('Too many requests. Please wait a moment and try again.');
         case 500:
           throw new Error('Server error. Please try again later.');
+        case 503:
+          throw new Error(data?.error || 'Service temporarily unavailable. Please try again shortly.');
         default:
           throw new Error(data?.error || `Something went wrong (${status}). Please try again.`);
       }

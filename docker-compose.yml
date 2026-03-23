@@ -1,19 +1,13 @@
-version: '3.8'
-
 services:
   ats-resume-analyzer:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: ats-resume-analyzer
+    env_file:
+      - .env.docker
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - OPENAI_API_KEY=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
-      - ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free
-    command: ["sh", "-c", "rm -f ./data/dev.db && pnpm exec prisma db push --force-reset && node dist/index.js"]
+      - "${APP_HOST_PORT:-3000}:3000"
     volumes:
       - ats-data:/app/ats-backend/data
       - ats-uploads:/app/ats-backend/uploads

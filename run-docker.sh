@@ -1,56 +1,40 @@
 #!/bin/bash
-# Quick script to build and run ATS Resume Analyzer Docker container
+set -euo pipefail
 
-echo "🐳 ATS Resume Analyzer - Docker Deployment"
-echo "=========================================="
+echo "ATS Resume Analyzer - Docker Deployment"
+echo "======================================="
 
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker is not running. Please start Docker Desktop or Docker daemon."
+if ! docker info >/dev/null 2>&1; then
+    echo "Docker is not running. Please start Docker Desktop or your Docker daemon first."
     exit 1
 fi
 
-echo "✅ Docker is running"
-
-# Build the image
-echo ""
-echo "📦 Building Docker image..."
-docker build -t ats-resume-analyzer:latest .
-
-if [ $? -ne 0 ]; then
-    echo "❌ Docker build failed. Check the error messages above."
+if [ ! -f .env.docker ]; then
+    echo "Missing .env.docker."
+    echo "Create it first with:"
+    echo "  cp .env.docker.example .env.docker"
+    echo "Then edit .env.docker and add your OpenRouter key and JWT secrets."
     exit 1
 fi
 
-echo "✅ Docker image built successfully"
+HOST_PORT="$(sed -n 's/^APP_HOST_PORT=//p' .env.docker | head -n 1)"
+HOST_PORT="${HOST_PORT:-3000}"
 
-# Stop existing container if running
-echo ""
-echo "🛑 Stopping existing container (if any)..."
-docker-compose down 2>/dev/null || true
+echo
+echo "Building and starting the stack..."
+docker compose --env-file .env.docker up --build -d
 
-# Run the container
-echo ""
-echo "🚀 Starting container..."
-docker-compose up -d
+echo
+echo "Container status:"
+docker compose ps
 
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to start container"
-    exit 1
-fi
-
-echo "✅ Container started!"
-echo ""
-echo "📊 Container Status:"
-docker ps | grep ats-resume-analyzer
-
-echo ""
-echo "🌐 Access the application:"
-echo "   Frontend: http://localhost:3000"
-echo "   Backend:  http://localhost:3000/api"
-echo "   Health:   http://localhost:3000/api/health"
-
-echo ""
-echo "📝 To view logs: docker-compose logs -f"
-echo "🛑 To stop:      docker-compose down"
-echo ""
+echo
+echo "Endpoints:"
+echo "  App:    http://localhost:${HOST_PORT}"
+echo "  Health: http://localhost:${HOST_PORT}/api/health"
+echo
+echo "Logs:"
+echo "  docker compose logs -f"
+echo
+echo "Stop:"
+echo "  docker compose down"

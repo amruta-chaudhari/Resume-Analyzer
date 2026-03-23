@@ -14,7 +14,7 @@ datasource db {
 // ========================================
 
 model User {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
 
   // Authentication
   email                 String    @unique
@@ -61,7 +61,7 @@ model User {
 }
 
 model Resume {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String
 
   // Resume Info
@@ -118,7 +118,7 @@ model Resume {
 }
 
 model ResumeVersion {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   resumeId              String
 
   // Version Info
@@ -154,7 +154,7 @@ model ResumeVersion {
 }
 
 model Template {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
 
   // Template Info
   name                  String    @unique
@@ -189,7 +189,7 @@ model Template {
 }
 
 model JobDescription {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String
 
   // Job Info
@@ -219,7 +219,7 @@ model JobDescription {
 }
 
 model Analysis {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String
   resumeId              String
   jobDescriptionId      String?
@@ -289,7 +289,7 @@ model AiUsage {
 }
 
 model RefreshSession {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String
   tokenHash             String    @unique
   expiresAt             DateTime
@@ -306,7 +306,7 @@ model RefreshSession {
 }
 
 model Subscription {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String    @unique
 
   // Subscription Info
@@ -337,7 +337,7 @@ model Subscription {
 }
 
 model AuditLog {
-  id                    String    @id @default(uuid()) @map("_id")
+  id                    String    @id @default(uuid())
   userId                String?
 
   // Action Info
