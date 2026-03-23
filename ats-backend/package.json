@@ -6,6 +6,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:setup:dev": "npm run prisma:generate && npm run prisma:db:push",
     "prisma:setup:prod": "npm run prisma:generate && npm run prisma:deploy",
+    "create-admin": "node create-admin.js",
     "build": "tsc",
     "start": "node dist/index.js",
     "prestart": "npm run prisma:setup:prod",

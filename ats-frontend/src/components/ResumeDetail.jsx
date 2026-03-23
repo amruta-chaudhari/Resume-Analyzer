@@ -4,6 +4,7 @@ import { analyzeStoredResume, downloadResumeFile, exportResume } from '../servic
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
 import AnalysisResults from './AnalysisResults';
+import { extractJobTitle } from '../utils/jobTitle';
 
 const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
   const navigate = useNavigate();
@@ -23,7 +24,13 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
       setAnalyzing(true);
       setError('');
 
-      const result = await analyzeStoredResume(initialResume.id, jobDescription);
+      const result = await analyzeStoredResume(
+        initialResume.id,
+        jobDescription,
+        null,
+        {},
+        extractJobTitle(jobDescription)
+      );
       if (result?.savedAnalysisId || result?.id) {
         navigate(`/analysis/${result.savedAnalysisId || result.id}`, {
           state: { analysis: result },

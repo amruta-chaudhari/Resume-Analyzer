@@ -55,6 +55,28 @@ type HitBucket = {
   resetAt: number;
 };
 
+const parsePositiveInt = (rawValue: string | undefined, fallback: number) => {
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.floor(parsed);
+};
+
+const parseBooleanFlag = (rawValue: string | undefined) => {
+  if (!rawValue) {
+    return false;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+};
+
 const createRateLimiter = (windowMs: number, max: number) => {
   const buckets = new Map<string, HitBucket>();
   let lastCleanup = 0;
@@ -89,6 +111,8 @@ const createRateLimiter = (windowMs: number, max: number) => {
   };
 };
 
+const noopLimiter: express.RequestHandler = (_req, _res, next) => next();
+
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     if (!origin || configuredCorsOrigins.includes(origin)) {
@@ -100,10 +124,38 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
 };
 
-const globalLimiter = createRateLimiter(15 * 60 * 1000, 500);
-const authLimiter = createRateLimiter(15 * 60 * 1000, 50);
-const analyzeLimiter = createRateLimiter(15 * 60 * 1000, 40);
-const adminLimiter = createRateLimiter(15 * 60 * 1000, 10);
+const isProduction = process.env.NODE_ENV === 'production';
+const disableRateLimits = parseBooleanFlag(process.env.DISABLE_RATE_LIMITS);
+const relaxedRateLimits = !isProduction || parseBooleanFlag(process.env.RELAX_RATE_LIMITS);
+const rateLimitWindowMs = parsePositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000);
+
+const createConfiguredLimiter = (
+  envVarName: string,
+  productionMax: number,
+  relaxedMax: number
+) => {
+  if (disableRateLimits) {
+    return noopLimiter;
+  }
+
+  const fallbackMax = relaxedRateLimits ? relaxedMax : productionMax;
+  const max = parsePositiveInt(process.env[envVarName], fallbackMax);
+  return createRateLimiter(rateLimitWindowMs, max);
+};
+
+const globalLimiter = createConfiguredLimiter('RATE_LIMIT_GLOBAL_MAX', 500, 20000);
+const authLimiter = createConfiguredLimiter('RATE_LIMIT_AUTH_MAX', 50, 5000);
+const analyzeLimiter = createConfiguredLimiter('RATE_LIMIT_ANALYZE_MAX', 40, 3000);
+const adminLimiter = createConfiguredLimiter('RATE_LIMIT_ADMIN_MAX', 10, 5000);
+
+Logger.info('Rate limit configuration loaded', {
+  mode: disableRateLimits ? 'disabled' : relaxedRateLimits ? 'relaxed' : 'strict',
+  windowMs: rateLimitWindowMs,
+  globalMax: parsePositiveInt(process.env.RATE_LIMIT_GLOBAL_MAX, relaxedRateLimits ? 20000 : 500),
+  authMax: parsePositiveInt(process.env.RATE_LIMIT_AUTH_MAX, relaxedRateLimits ? 5000 : 50),
+  analyzeMax: parsePositiveInt(process.env.RATE_LIMIT_ANALYZE_MAX, relaxedRateLimits ? 3000 : 40),
+  adminMax: parsePositiveInt(process.env.RATE_LIMIT_ADMIN_MAX, relaxedRateLimits ? 5000 : 10),
+});
 
 app.use((_, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');

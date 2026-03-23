@@ -7,6 +7,7 @@ import ModelSelector from '../components/ModelSelector';
 import ModelParameters from '../components/ModelParameters';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { extractJobTitle } from '../utils/jobTitle';
 
 const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, connectionStatus, setConnectionStatus, onModelSelect, onModelParametersChange }) => {
   const navigate = useNavigate();
@@ -84,24 +85,6 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
     setAnalysisResult(null);
 
     try {
-      // Extract job title from the job description - look for common patterns
-      const extractJobTitle = (jd) => {
-        const lines = jd.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-
-        // Look for lines that might be job titles (short, title case, etc.)
-        for (const line of lines.slice(0, 5)) {
-          if (line.length > 3 && line.length < 100 &&
-              (line.includes('Engineer') || line.includes('Developer') || line.includes('Manager') ||
-               line.includes('Analyst') || line.includes('Specialist') || line.includes('Director') ||
-               line.includes('Senior') || line.includes('Lead') || line.includes('Principal'))) {
-            return line;
-          }
-        }
-
-        // Fallback to first non-empty line
-        return lines[0] || 'Untitled Position';
-      };
-
       const jobTitle = extractJobTitle(jobDescription);
       const result = await analyzeResume(
         resumeFile,

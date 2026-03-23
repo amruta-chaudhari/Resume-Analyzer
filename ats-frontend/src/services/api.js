@@ -175,7 +175,7 @@ apiClient.interceptors.response.use(
         case 429:
           throw new Error('Too many requests. Please wait a moment and try again.');
         case 500:
-          throw new Error('Server error. Please try again later.');
+          throw new Error(data?.error || 'Server error. Please try again later.');
         case 503:
           throw new Error(data?.error || 'Service temporarily unavailable. Please try again shortly.');
         default:
@@ -507,7 +507,11 @@ export const createResumeFromStructuredData = async (title, structuredData, temp
 
 export const updateResume = async (resumeId, updates) => {
   try {
-    const response = await apiClient.put(`/api/resumes/${resumeId}`, updates);
+    const payload = {
+      ...updates,
+      templateId: updates?.templateId === '' ? null : updates?.templateId,
+    };
+    const response = await apiClient.put(`/api/resumes/${resumeId}`, payload);
     return response.data.data.resume;
   } catch (error) {
     console.error('Failed to update resume:', error);

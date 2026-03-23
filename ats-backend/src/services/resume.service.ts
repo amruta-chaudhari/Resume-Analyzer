@@ -267,15 +267,6 @@ export class ResumeService {
       throw new Error('Resume not found');
     }
 
-    // Create version before updating
-    await this.versionService.createVersion(
-      resumeId,
-      existing.version,
-      existing.content,
-      'Manual edit',
-      'manual'
-    );
-
     const updateData: Record<string, any> = {
       version: { increment: 1 },
       updatedAt: new Date(),
@@ -309,13 +300,21 @@ export class ResumeService {
       }
     }
 
-    // Update resume
-    const updated = await prisma.resume.update({
-      where: { id: resumeId },
-      data: updateData,
-    });
+    return prisma.$transaction(async (tx) => {
+      await this.versionService.createVersion(
+        resumeId,
+        existing.version,
+        existing.content,
+        'Manual edit',
+        'manual',
+        tx
+      );
 
-    return updated;
+      return tx.resume.update({
+        where: { id: resumeId },
+        data: updateData,
+      });
+    });
   }
 
   async deleteResume(resumeId: string, userId: string) {

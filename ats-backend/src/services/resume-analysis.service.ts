@@ -34,7 +34,7 @@ export class ResumeAnalysisService {
         baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
     });
 
-    const model = process.env.ANALYSIS_MODEL || 'google/gemini-2.0-flash-exp:free';
+    const model = process.env.ANALYSIS_MODEL || 'openrouter/free';
 
     try {
       const completion = await openai.chat.completions.create({

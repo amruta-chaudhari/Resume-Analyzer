@@ -10,7 +10,7 @@ process.env.JWT_SECRET = 'test-jwt-secret-key';
 process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-key';
 process.env.OPENAI_API_KEY = 'test-openai-api-key';
 process.env.BASE_URL = 'https://openrouter.ai/api/v1';
-process.env.ANALYSIS_MODEL = 'google/gemini-2.0-flash-exp:free';
+process.env.ANALYSIS_MODEL = 'openrouter/free';
 process.env.DATABASE_URL = 'sqlite:./test.db';
 process.env.NODE_ENV = 'test';
 

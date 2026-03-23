@@ -1,7 +1,16 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'node:path';
-import { authRoutes, healthRoutes, adminRoutes } from '../src/routes/index';
+import {
+  authRoutes,
+  healthRoutes,
+  adminRoutes,
+  resumeRoutes,
+  analysisRoutes,
+  jobDescriptionsRoutes,
+  templateRoutes,
+  modelsRoutes,
+} from '../src/routes/index';
 import { errorHandler, notFoundHandler } from '../src/middleware/error.middleware';
 
 const backendDir = path.resolve(__dirname, '..');
@@ -18,6 +27,11 @@ export const createPlaywrightApp = () => {
   app.use(express.urlencoded({ extended: true }));
 
   app.use('/api/auth', authRoutes);
+  app.use('/api/resumes', resumeRoutes);
+  app.use('/api/templates', templateRoutes);
+  app.use('/api', modelsRoutes);
+  app.use('/api', analysisRoutes);
+  app.use('/api', jobDescriptionsRoutes);
   app.use('/api', healthRoutes);
   app.use('/api/admin', adminRoutes);
 

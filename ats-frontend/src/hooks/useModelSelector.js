@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getAvailableModels } from '../services/api';
 
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free';
+const DEFAULT_MODEL = 'openrouter/free';
 
 export const useModelSelector = (selectedModel, onModelSelect, disabled = false) => {
   const [models, setModels] = useState([]);
@@ -52,11 +52,11 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
       // Fallback to default model
       const fallbackModel = {
         id: DEFAULT_MODEL,
-        name: 'Gemini 2.0 Flash',
-        provider: 'Google',
-        description: 'Google\'s latest Gemini model with excellent reasoning capabilities',
+        name: 'OpenRouter Free',
+        provider: 'OpenRouter',
+        description: 'OpenRouter route that automatically selects an available free model.',
         created: Math.floor(Date.now() / 1000),
-        context_length: 32768,
+        context_length: 128000,
         recommended: true
       };
       setModels([fallbackModel]);

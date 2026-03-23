@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthenticationError, ConflictError, InvalidCredentialsError } from '../utils/errors';
+import { Logger } from '../utils/logger';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -79,17 +80,48 @@ export class AuthService {
       throw new InvalidCredentialsError('Invalid credentials');
     }
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    // Update last login (best effort so metadata write does not block authentication)
+    await this.updateLastLoginAt(user.id);
 
     // Generate tokens
     const accessToken = this.generateAccessToken(user.id, user.email);
     const refreshSession = await this.createRefreshSession(user.id);
 
     return { user, accessToken, refreshToken: refreshSession.token };
+  }
+
+  private async updateLastLoginAt(userId: string): Promise<void> {
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { lastLoginAt: new Date() },
+      });
+    } catch (error) {
+      if (this.isRecoverableLastLoginUpdateError(error)) {
+        Logger.warn('Skipping non-critical lastLoginAt update after successful credential validation', {
+          userId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  private isRecoverableLastLoginUpdateError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const normalizedMessage = error.message.toLowerCase();
+
+    return (
+      normalizedMessage.includes('attempt to write a readonly database') ||
+      normalizedMessage.includes('readonly database') ||
+      normalizedMessage.includes('extended_code: 1032') ||
+      normalizedMessage.includes('database is locked')
+    );
   }
 
   async refreshToken(refreshToken: string) {

@@ -3,7 +3,10 @@
  * Manages resume version history and change tracking
  */
 
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
+
+type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
 export class ResumeVersionService {
   /**
@@ -21,9 +24,10 @@ export class ResumeVersionService {
     currentVersion: number,
     content: any,
     changeSummary: string = 'Manual edit',
-    changeType: string = 'manual'
+    changeType: string = 'manual',
+    client: PrismaClientLike = prisma
   ) {
-    const version = await prisma.resumeVersion.create({
+    const version = await client.resumeVersion.create({
       data: {
         resumeId,
         versionNumber: currentVersion,
@@ -116,7 +120,8 @@ export class ResumeVersionService {
       resume.version,
       resume.content,
       `Restored from version ${versionNumber}`,
-      'restore'
+      'restore',
+      prisma
     );
 
     // Restore the old version

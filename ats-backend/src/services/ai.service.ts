@@ -33,7 +33,7 @@ let modelCache: ModelCache = {
 let modelFetchPromise: Promise<AIModel[]> | null = null;
 
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'google/gemini-2.0-flash-exp:free';
+const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'openrouter/free';
 const AI_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '60000', 10);
 const AI_MAX_RETRIES = Number.parseInt(process.env.AI_MAX_RETRIES || '2', 10);
 
@@ -43,6 +43,17 @@ const REQUEST_TIMEOUT_MS = Number.isFinite(AI_REQUEST_TIMEOUT_MS) && AI_REQUEST_
 const MAX_RETRIES = Number.isFinite(AI_MAX_RETRIES) && AI_MAX_RETRIES >= 0
     ? AI_MAX_RETRIES
     : 2;
+
+const createDefaultModel = (): AIModel => ({
+    id: DEFAULT_MODEL,
+    name: 'OpenRouter Free',
+    provider: 'OpenRouter',
+    context_length: 128000,
+    supported_parameters: ['temperature', 'max_tokens'],
+    created: Math.floor(Date.now() / 1000),
+    description: 'OpenRouter route that selects an available free model for the request.',
+    recommended: true,
+});
 
 export class AIService {
     // Basic formatting analysis based on text patterns
@@ -137,7 +148,7 @@ export class AIService {
                 const response = await axios.get('https://openrouter.ai/api/v1/models');
 
                 // Filter and format models
-                const models: AIModel[] = response.data.data
+                const fetchedModels: AIModel[] = response.data.data
                     .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
                     .map((model: AIModel) => ({
                         id: model.id,
@@ -150,7 +161,12 @@ export class AIService {
                         created: model.created,
                         description: model.description || '',
                         architecture: model.architecture,
+                        recommended: model.id === DEFAULT_MODEL,
                     }));
+
+                const models = fetchedModels.some((model) => model.id === DEFAULT_MODEL)
+                    ? fetchedModels
+                    : [createDefaultModel(), ...fetchedModels];
 
                 modelCache.data = models;
                 modelCache.lastFetched = Date.now();

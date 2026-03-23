@@ -221,6 +221,28 @@ describe('AuthService', () => {
       });
     });
 
+    it('should continue login when lastLoginAt update fails with readonly sqlite error', async () => {
+      const mockUser = MockDataFactory.createUser();
+
+      mockPrisma.user.findUnique.mockResolvedValueOnce(mockUser);
+      mockBcrypt.compare.mockResolvedValueOnce(true);
+      mockPrisma.user.update.mockRejectedValueOnce(
+        new Error('attempt to write a readonly database (extended_code: 1032)')
+      );
+      mockPrisma.refreshSession.create.mockResolvedValueOnce(
+        MockDataFactory.createRefreshSession(mockUser.id)
+      );
+      mockPrisma.refreshSession.deleteMany.mockResolvedValueOnce({ count: 0 });
+
+      const result = await authService.login(mockUser.email, 'password123');
+
+      expect(result.user).toEqual(mockUser);
+      expect(result.accessToken).toBeDefined();
+      expect(result.refreshToken).toBeDefined();
+      expect(mockPrisma.user.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.refreshSession.create).toHaveBeenCalledTimes(1);
+    });
+
     it('should generate tokens with user id and email', async () => {
       const mockUser = MockDataFactory.createUser();
 

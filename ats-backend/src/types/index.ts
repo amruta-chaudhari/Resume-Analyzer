@@ -33,6 +33,7 @@ export interface AIModel {
   name: string;
   provider: string;
   context_length: number;
+  recommended?: boolean;
   supported_parameters: string[];
   per_request_limits?: {
     input_tokens?: number;

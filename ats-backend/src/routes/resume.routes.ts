@@ -84,10 +84,12 @@ const normalizeResumeUpdatePayload = (body: any): ResumeUpdateRequestBody => {
   }
 
   if (body.templateId !== undefined) {
-    if (body.templateId !== null && typeof body.templateId !== 'string') {
+    const normalizedTemplateId = body.templateId === '' ? null : body.templateId;
+
+    if (normalizedTemplateId !== null && typeof normalizedTemplateId !== 'string') {
       throw new Error('Template ID must be a string or null');
     }
-    normalized.templateId = body.templateId;
+    normalized.templateId = normalizedTemplateId;
   }
 
   if (body.structuredData !== undefined) {
@@ -261,6 +263,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (req: AuthRequest & { file?: Express.Multer.File }, res: Response) => {
   try {
     const { title, content, templateId, structuredData } = req.body;
+    const normalizedTemplateId = templateId === '' ? null : templateId;
 
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: 'Title is required' });
@@ -271,7 +274,7 @@ router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (r
       return res.status(400).json({ error: 'Title must be between 2 and 200 characters' });
     }
 
-    if (templateId !== undefined && templateId !== null && typeof templateId !== 'string') {
+    if (normalizedTemplateId !== undefined && normalizedTemplateId !== null && typeof normalizedTemplateId !== 'string') {
       return res.status(400).json({ error: 'Template ID must be a string' });
     }
 
@@ -293,7 +296,7 @@ router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (r
         req.userId!,
         normalizedTitle,
         req.file,
-        templateId
+        normalizedTemplateId ?? undefined
       );
     } else if (structuredData) {
       // Structured data (JSON)
@@ -306,7 +309,7 @@ router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (r
         req.userId!,
         normalizedTitle,
         sanitizeJSON(parsedData),
-        templateId
+        normalizedTemplateId ?? undefined
       );
     } else if (content) {
       // Plain text content
@@ -314,7 +317,7 @@ router.post('/', resumeUploadsPerMonthLimiter, upload.single('resume'), async (r
         req.userId!,
         normalizedTitle,
         sanitizeResumeContent(content),
-        templateId
+        normalizedTemplateId ?? undefined
       );
     } else {
       return res.status(400).json({ error: 'Either file, structuredData, or content is required' });

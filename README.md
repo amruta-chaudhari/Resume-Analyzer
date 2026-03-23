@@ -179,7 +179,7 @@ OPENROUTER_API_KEY=your-openrouter-api-key
 # Optional legacy alias
 OPENAI_API_KEY=
 BASE_URL=https://openrouter.ai/api/v1
-ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free
+ANALYSIS_MODEL=openrouter/free
 
 # Comma-separated allowed frontend origins
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173

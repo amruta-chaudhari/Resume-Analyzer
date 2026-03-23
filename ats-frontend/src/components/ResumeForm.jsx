@@ -109,7 +109,10 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
 
       let result;
       if (isEditing && resume) {
-        result = await updateResume(resume.id, formData);
+        result = await updateResume(resume.id, {
+          ...formData,
+          templateId: formData.templateId || null,
+        });
       } else {
         if (uploadedFile) {
           result = await createResumeFromFile(formData.title, uploadedFile, formData.templateId || undefined);

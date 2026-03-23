@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import { adminService } from '../services/adminService';
@@ -37,6 +37,24 @@ const emptyFormState = {
   deleted: false,
 };
 
+const getVisiblePageNumbers = (currentPage, totalPages) => {
+  const maxButtons = 5;
+
+  if (totalPages <= maxButtons) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const halfWindow = Math.floor(maxButtons / 2);
+  let start = Math.max(1, currentPage - halfWindow);
+  let end = Math.min(totalPages, start + maxButtons - 1);
+
+  if (end - start + 1 < maxButtons) {
+    start = Math.max(1, end - maxButtons + 1);
+  }
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+};
+
 const AdminPage = () => {
   const currentUser = useAuthStore((state) => state.user);
   const updateCurrentUser = useAuthStore((state) => state.updateUser);
@@ -45,6 +63,8 @@ const AdminPage = () => {
   const deferredSearch = useDeferredValue(search);
   const [users, setUsers] = useState([]);
   const [pagination, setPagination] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [userDetail, setUserDetail] = useState(null);
   const [formState, setFormState] = useState(emptyFormState);
@@ -57,16 +77,38 @@ const AdminPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const loadUsers = async (searchValue = deferredSearch, preferredUserId = selectedUserId) => {
+  const totalUsers = pagination?.total || 0;
+  const totalPages = Math.max(1, pagination?.totalPages || 1);
+  const activePage = pagination?.page || currentPage;
+  const activePageSize = pagination?.pageSize || pageSize;
+  const firstVisibleUserIndex = totalUsers === 0 ? 0 : ((activePage - 1) * activePageSize) + 1;
+  const lastVisibleUserIndex = totalUsers === 0 ? 0 : Math.min(totalUsers, firstVisibleUserIndex + users.length - 1);
+
+  const visiblePageNumbers = useMemo(
+    () => getVisiblePageNumbers(activePage, totalPages),
+    [activePage, totalPages]
+  );
+
+  const loadUsers = async ({
+    searchValue = deferredSearch,
+    preferredUserId = selectedUserId,
+    pageValue = currentPage,
+    pageSizeValue = pageSize,
+  } = {}) => {
     setLoadingUsers(true);
     setErrorMessage('');
 
     try {
       const result = await adminService.listUsers({
         search: searchValue || undefined,
-        page: 1,
-        pageSize: 25,
+        page: pageValue,
+        pageSize: pageSizeValue,
       });
+
+      if (result.pagination && pageValue > result.pagination.totalPages) {
+        setCurrentPage(result.pagination.totalPages);
+        return;
+      }
 
       setUsers(result.users);
       setPagination(result.pagination);
@@ -118,8 +160,12 @@ const AdminPage = () => {
   };
 
   useEffect(() => {
-    loadUsers(deferredSearch);
-  }, [deferredSearch]);
+    loadUsers({
+      searchValue: deferredSearch,
+      pageValue: currentPage,
+      pageSizeValue: pageSize,
+    });
+  }, [deferredSearch, currentPage, pageSize]);
 
   useEffect(() => {
     loadUserDetail(selectedUserId);
@@ -130,6 +176,20 @@ const AdminPage = () => {
       ...previous,
       [field]: value,
     }));
+  };
+
+  const handlePageChange = (nextPage) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === currentPage) {
+      return;
+    }
+
+    setCurrentPage(nextPage);
+  };
+
+  const handlePageSizeChange = (event) => {
+    const nextPageSize = Number(event.target.value) || 25;
+    setPageSize(nextPageSize);
+    setCurrentPage(1);
   };
 
   const handleSaveProfile = async (event) => {
@@ -155,7 +215,12 @@ const AdminPage = () => {
       };
 
       await adminService.updateUser(selectedUserId, payload);
-      await loadUsers(deferredSearch, selectedUserId);
+      await loadUsers({
+        searchValue: deferredSearch,
+        preferredUserId: selectedUserId,
+        pageValue: currentPage,
+        pageSizeValue: pageSize,
+      });
       await loadUserDetail(selectedUserId);
 
       if (selectedUserId === currentUser?.id) {
@@ -210,7 +275,12 @@ const AdminPage = () => {
     try {
       const result = await adminService.revokeUserSessions(selectedUserId);
       await loadUserDetail(selectedUserId);
-      await loadUsers(deferredSearch, selectedUserId);
+      await loadUsers({
+        searchValue: deferredSearch,
+        preferredUserId: selectedUserId,
+        pageValue: currentPage,
+        pageSizeValue: pageSize,
+      });
       setSuccessMessage(`${result.revokedSessions} active session(s) revoked.`);
     } catch (error) {
       setErrorMessage(error.message || 'Failed to revoke sessions.');
@@ -262,13 +332,18 @@ const AdminPage = () => {
               id="admin-search"
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Email, name, phone"
               className="mt-3 w-full rounded-2xl border border-white/20 bg-white/70 px-4 py-3 text-gray-900 outline-none ring-0 transition focus:border-cyan-400 dark:bg-slate-900/60 dark:text-white"
             />
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
               {pagination
-                ? `${pagination.total} user(s) found`
+                ? totalUsers === 0
+                  ? 'No users found'
+                  : `Showing ${firstVisibleUserIndex}-${lastVisibleUserIndex} of ${totalUsers} user(s)`
                 : 'Search the full user directory'}
             </p>
 
@@ -323,6 +398,62 @@ const AdminPage = () => {
                 </button>
               ))}
             </div>
+
+            {!loadingUsers && pagination && (
+              <div className="mt-5 space-y-3 border-t border-white/15 pt-4">
+                <div className="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="flex items-center gap-2">
+                    <span>Rows per page</span>
+                    <select
+                      value={pageSize}
+                      onChange={handlePageSizeChange}
+                      className="rounded-xl border border-white/20 bg-white/70 px-2 py-1 text-gray-900 outline-none transition focus:border-cyan-400 dark:bg-slate-900/60 dark:text-white"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <span>Page {activePage} of {totalPages}</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(activePage - 1)}
+                    disabled={activePage <= 1}
+                    className="rounded-xl border border-white/20 bg-white/60 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-cyan-300 hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900/50 dark:text-gray-200"
+                  >
+                    Previous
+                  </button>
+
+                  {visiblePageNumbers.map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() => handlePageChange(pageNumber)}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                        pageNumber === activePage
+                          ? 'border-cyan-500 bg-cyan-500/15 text-cyan-800 dark:text-cyan-200'
+                          : 'border-white/20 bg-white/60 text-gray-700 hover:border-cyan-300 hover:bg-white/80 dark:bg-slate-900/50 dark:text-gray-200'
+                      }`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(activePage + 1)}
+                    disabled={activePage >= totalPages}
+                    className="rounded-xl border border-white/20 bg-white/60 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-cyan-300 hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900/50 dark:text-gray-200"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-6">

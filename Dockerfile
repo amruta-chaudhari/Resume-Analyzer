@@ -52,7 +52,7 @@ RUN apk add --no-cache \
 ENV NODE_ENV=production \
     PORT=3000 \
     BASE_URL=https://openrouter.ai/api/v1 \
-    ANALYSIS_MODEL=google/gemini-2.0-flash-exp:free \
+    ANALYSIS_MODEL=openrouter/free \
     CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000 \
     DATABASE_URL=file:./data/dev.db \
     DATABASE_PROVIDER=sqlite \

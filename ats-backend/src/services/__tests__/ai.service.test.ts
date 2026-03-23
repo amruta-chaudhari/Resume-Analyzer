@@ -89,9 +89,9 @@ describe('AIService', () => {
      it('should fetch available models from OpenRouter', async () => {
        const mockModels = [
          {
-           id: 'google/gemini-2.0-flash-exp:free',
-           name: 'Gemini 2.0 Flash',
-           provider: 'google',
+           id: 'qwen/qwen3-coder:free',
+           name: 'Qwen3 Coder',
+           provider: 'qwen',
            context_length: 128000,
            pricing: { prompt: '0', completion: '0' },
          },
@@ -101,8 +101,8 @@ describe('AIService', () => {
 
        const models = await aiService.getAvailableModels();
 
-       expect(models).toHaveLength(1);
-       expect(models[0].id).toBe('google/gemini-2.0-flash-exp:free');
+       expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
+       expect(models.some((model) => model.id === 'qwen/qwen3-coder:free')).toBe(true);
        expect(mockAxios.get).toHaveBeenCalledWith('https://openrouter.ai/api/v1/models');
      });
 
@@ -178,7 +178,8 @@ describe('AIService', () => {
 
        const models = await aiService.refreshModelsCache();
 
-       expect(models).toHaveLength(1);
+       expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
+       expect(models.some((model) => model.id === 'model1')).toBe(true);
        expect(mockAxios.get).toHaveBeenCalled();
      });
 
@@ -197,7 +198,8 @@ describe('AIService', () => {
        
        const refreshed = await aiService.refreshModelsCache();
 
-       expect(refreshed).toHaveLength(1);
+       expect(refreshed.some((model) => model.id === 'openrouter/free')).toBe(true);
+       expect(refreshed.some((model) => model.id === 'model1')).toBe(true);
        expect(mockAxios.get).toHaveBeenCalled();
      });
    });
