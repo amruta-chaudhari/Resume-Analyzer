@@ -20,6 +20,9 @@ import { Logger } from '../utils/logger';
 export function createRateLimitMiddleware(limitKey: RateLimitKey) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      // Disabled internal endpoint rate limiters temporarily
+      return next();
+
       // Skip rate limiting if no user (public endpoint) or admin override
       if (!req.userId) {
         return next();

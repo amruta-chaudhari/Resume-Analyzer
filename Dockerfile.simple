@@ -28,6 +28,7 @@ COPY ats-backend/tsconfig.json ./
 COPY ats-backend/prisma ./prisma
 COPY ats-backend/src ./src
 COPY ats-backend/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY ats-backend/create-admin.js ./create-admin.js
 
 RUN npx prisma generate
 RUN npm run build
