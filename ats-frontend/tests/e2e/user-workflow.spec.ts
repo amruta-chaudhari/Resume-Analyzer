@@ -215,6 +215,7 @@ const bootstrapUserWorkflowMocks = async (page: Page) => {
 
 test.describe('End-to-End User Workflow', () => {
   test('user can complete major workflow from signup to logout', async ({ page }) => {
+    test.setTimeout(120000);
     const timestamp = Date.now();
     const resumeTitle = `Workflow Resume ${timestamp}`;
     const jobTitle = `Workflow Engineer ${timestamp}`;

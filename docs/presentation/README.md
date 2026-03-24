@@ -1,42 +1,91 @@
 # ATS Resume Analyzer — Presentation Package
 
-This folder contains a complete, presentation-ready package for a **2-hour master’s-level project presentation**.
+This folder contains the full 2-hour presentation bundle, including deck sources, speaker materials, screenshots, end-to-end video tours, and a generated PowerPoint deck.
 
 ## Canonical files
 
+- `ATS_Resume_Analyzer_2hr_Master_Presentation.pptx` — Primary exported PowerPoint deck with embedded notes and media.
+- `SLIDE_DECK_2H.md` — Main markdown deck.
+- `SLIDE_DECK_2H_MARP.md` — Presenter-optimized Marp deck.
+- `SPEAKER_NOTES_2H.md` — Detailed narration and pacing notes.
+- `CODE_SNIPPETS.md` — Representative backend/frontend snippets.
+- `CODE_REVIEW_INSIGHTS.md` — Non-overtechnical engineering review.
+- `DEMO_RUNBOOK.md` — Live demo execution sequence.
+- `VIVA_QA_BANK.md` — Defense-style Q&A prep.
+- `MARP_GUIDE.md` — Marp setup/export/presenter-mode guide.
 
 ## Compatibility aliases
 
-These filenames are retained for backward links but now point to the canonical files above:
-- `ATS_Resume_Analyzer_2hr_Speaker_Notes.md`
+Retained for old references:
 
-### Desktop
+- `ATS_Resume_Analyzer_2hr_Deck.md` → `SLIDE_DECK_2H.md`
+- `ATS_Resume_Analyzer_2hr_Speaker_Notes.md` → `SPEAKER_NOTES_2H.md`
 
-- `screenshots/desktop/05-dashboard-analysis-model-selector.png`
-- `screenshots/desktop/06-resume-list.png`
-- `screenshots/desktop/07-resume-detail.png`
-- `screenshots/desktop/08-resume-form-edit.png`
-- `screenshots/desktop/09-resume-preview-modal.png`
-- `screenshots/desktop/10-resume-form-create.png`
-- `screenshots/desktop/11-history-dashboard.png`
-- `screenshots/desktop/12-job-description-form.png`
-- `screenshots/desktop/13-analysis-results.png`
-- `screenshots/desktop/14-dashboard-admin-entry.png`
-- `screenshots/desktop/15-admin-console.png`
-- `screenshots/desktop/16-admin-search-filtered.png`
+## Screenshot tours
 
-### Mobile
+- Desktop and mobile screenshot captures are in `screenshots/light/*` and `screenshots/dark/*`.
+- Capture source: `ats-frontend/tests/e2e/tour-presentation.spec.ts` (tag: `@tour`).
 
-- `screenshots/mobile/01-login-mobile.png`
-- `screenshots/mobile/02-dashboard-analysis-mobile.png`
-- `screenshots/mobile/03-resume-list-mobile.png`
-- `screenshots/mobile/04-analysis-results-mobile.png`
-- `screenshots/mobile/05-admin-console-mobile.png`
+Run command:
+
+- From repo root: `npm --prefix ats-frontend run test:tour`
+
+## End-to-end video tours (user + admin)
+
+Generated output directory:
+
+- `docs/presentation/videos/`
+
+Generated files:
+
+- `tour-user-desktop-light.webm` / `.mp4` — End-to-end user feature tour in light mode
+- `tour-user-desktop-dark.webm` / `.mp4` — End-to-end user feature tour in dark mode
+- `tour-admin-desktop-light.webm` / `.mp4` — End-to-end admin feature tour in light mode
+- `tour-admin-desktop-dark.webm` / `.mp4` — End-to-end admin feature tour in dark mode
+
+Coverage included in videos:
+
+- **User tour coverage**
+	- Login and signup page flows (entry UX)
+	- Dashboard analysis workspace and connection state
+	- Settings panel interactions and AI model selector expansion
+	- Resume upload + job-description input + analyze submission flow
+	- Analysis results page navigation
+	- Resume management: list, detail, export buttons, edit form, preview modal, create form
+	- History: analysis history navigation back to result details
+	- Job Description Manager: create, edit, and delete actions
+	- User logout and return-to-login flow
+
+- **Admin tour coverage**
+	- Admin entry from dashboard and `/admin` landing
+	- User search and selection
+	- Profile updates (name/tier) and save flow
+	- Password reset action
+	- Revoke-all-sessions action
+	- Audit trail visibility
+	- Return to dashboard flow
+
+Run command:
+
+- From repo root: `npm --prefix ats-frontend run test:tour:video`
+
+Or direct Playwright command:
+
+- `npx --prefix ats-frontend playwright test ats-frontend/tests/e2e/tour-presentation.spec.ts --project=chromium -g @tour-video`
+
+## PPTX generation
+
+Run commands:
+
+- `npm --prefix ats-frontend run presentation:pptx`
+- `npm --prefix ats-frontend run presentation:build`
+
+`presentation:build` refreshes screenshots, refreshes videos, converts video assets to MP4 as needed with `ffmpeg`, and exports `ATS_Resume_Analyzer_2hr_Master_Presentation.pptx`.
 
 ## Recommended usage order
 
-1. Start with `SLIDE_DECK_2H.md`.
-2. Keep `SPEAKER_NOTES_2H.md` open while presenting.
-3. Use `CODE_SNIPPETS.md` for technical deep-dive/Q&A.
-4. Use `DEMO_RUNBOOK.md` for live sequence control.
-5. Use `VIVA_QA_BANK.md` for defense prep.
+1. Present from `ATS_Resume_Analyzer_2hr_Master_Presentation.pptx`.
+2. Use the embedded notes pane while speaking.
+3. Keep `SPEAKER_NOTES_2H.md` open only as a backup script.
+4. Use `DEMO_RUNBOOK.md` for live flow continuity.
+5. Keep the embedded light/dark user/admin tour videos available as backup demo assets.

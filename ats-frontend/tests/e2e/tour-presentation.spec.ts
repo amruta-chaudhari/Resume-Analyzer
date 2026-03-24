@@ -1,11 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const screenshotRoot = path.resolve(__dirname, '../../../docs/presentation/screenshots');
+const videoRoot = path.resolve(__dirname, '../../../docs/presentation/videos');
 
 type ThemeMode = 'light' | 'dark';
 type DeviceMode = 'desktop' | 'mobile';
@@ -273,6 +274,45 @@ const ensureOutputFolder = (theme: ThemeMode, device: DeviceMode) => {
   return dirPath;
 };
 
+const ensureVideoFolder = () => {
+  mkdirSync(videoRoot, { recursive: true });
+  return videoRoot;
+};
+
+const pauseForTour = async (page: Page, ms = 700) => {
+  await page.waitForTimeout(ms);
+};
+
+const closeSettingsPanel = async (page: Page) => {
+  const closeButton = page.getByLabel('Close settings');
+  await expect(closeButton).toBeVisible();
+  await pauseForTour(page, 250);
+  await closeButton.click({ force: true });
+};
+
+const saveTourVideo = async (page: Page, fileName: string) => {
+  const dir = ensureVideoFolder();
+  const video = page.video();
+  const targetPath = path.join(dir, `${fileName}.webm`);
+
+  await page.context().close();
+
+  if (!video) {
+    throw new Error('Video recording is unavailable. Ensure test.use({ video: "on" }) is enabled.');
+  }
+
+  await video.saveAs(targetPath);
+
+  try {
+    const rawPath = await video.path();
+    if (rawPath && rawPath !== targetPath && existsSync(rawPath)) {
+      unlinkSync(rawPath);
+    }
+  } catch {
+    // Ignore cleanup errors to keep capture resilient.
+  }
+};
+
 const installTheme = async (page: Page, theme: ThemeMode) => {
   await page.addInitScript((nextTheme) => {
     window.localStorage.setItem('theme', nextTheme);
@@ -280,13 +320,19 @@ const installTheme = async (page: Page, theme: ThemeMode) => {
   }, theme);
 };
 
-const takeShot = async (page: Page, theme: ThemeMode, device: DeviceMode, name: string) => {
+const takeShot = async (
+  page: Page,
+  theme: ThemeMode,
+  device: DeviceMode,
+  name: string,
+  options: { fullPage?: boolean } = {}
+) => {
   const outDir = ensureOutputFolder(theme, device);
   await expect(page.locator('body')).toBeVisible();
   await page.waitForTimeout(250);
   await page.screenshot({
     path: path.join(outDir, `${name}.png`),
-    fullPage: true,
+    fullPage: options.fullPage ?? true,
     animations: 'disabled',
   });
 };
@@ -334,6 +380,30 @@ const installApiMocks = async (page: Page, user: typeof freeUser, withAdminData 
       });
     }
 
+    if (pathname === '/api/analyze' && method === 'POST') {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          jobId: 'job-tour-001',
+          status: 'queued',
+        },
+      }, 202);
+    }
+
+    if (pathname.startsWith('/api/analysis/') && pathname.endsWith('/status') && method === 'GET') {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          state: 'completed',
+          progress: 100,
+          result: {
+            savedAnalysisId: 'analysis-001',
+            analysisId: 'analysis-001',
+          },
+        },
+      });
+    }
+
     if (pathname === '/api/templates' && method === 'GET') {
       return fulfillJson(route, {
         success: true,
@@ -378,11 +448,45 @@ const installApiMocks = async (page: Page, user: typeof freeUser, withAdminData 
       });
     }
 
+    if (pathname === '/api/resumes/resume-001/analyze' && method === 'POST') {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          id: 'analysis-001',
+          savedAnalysisId: 'analysis-001',
+        },
+      });
+    }
+
     if (pathname === '/api/resumes/preview' && method === 'POST') {
       return route.fulfill({
         status: 200,
         contentType: 'text/html',
         body: '<!doctype html><html><body><h1 style="font-family:Arial">Resume Preview</h1><p>Preview generated for tour screenshots.</p></body></html>',
+      });
+    }
+
+    if (pathname === '/api/resumes/resume-001/file' && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/pdf',
+        body: '%PDF-1.4 mock original file',
+      });
+    }
+
+    if (pathname === '/api/resumes/resume-001/export/pdf' && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/pdf',
+        body: '%PDF-1.4 mock export pdf',
+      });
+    }
+
+    if (pathname === '/api/resumes/resume-001/export/word' && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        body: 'PK\u0003\u0004mock-docx',
       });
     }
 
@@ -420,6 +524,41 @@ const installApiMocks = async (page: Page, user: typeof freeUser, withAdminData 
             totalPages: 1,
           },
         },
+      });
+    }
+
+    if (pathname === '/api/job-descriptions' && method === 'POST') {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          id: 'job-002',
+          title: 'Principal Frontend Engineer',
+          description:
+            'Lead frontend platform architecture, mentor teams, and own performance outcomes across product surfaces.',
+          createdAt: '2026-03-05T08:00:00.000Z',
+          updatedAt: '2026-03-05T08:00:00.000Z',
+        },
+      }, 201);
+    }
+
+    if (pathname.startsWith('/api/job-descriptions/') && method === 'PUT') {
+      return fulfillJson(route, {
+        success: true,
+        data: {
+          id: pathname.split('/').pop(),
+          title: 'Principal Frontend Engineer (Updated)',
+          description:
+            'Updated job description focused on architecture, mentoring, and measurable delivery impact.',
+          createdAt: '2026-03-05T08:00:00.000Z',
+          updatedAt: '2026-03-05T08:10:00.000Z',
+        },
+      });
+    }
+
+    if (pathname.startsWith('/api/job-descriptions/') && method === 'DELETE') {
+      return fulfillJson(route, {
+        success: true,
+        data: { deleted: true },
       });
     }
 
@@ -514,6 +653,210 @@ const bootstrapSession = async (page: Page, user: typeof freeUser) => {
   await page.reload({ waitUntil: 'networkidle' });
 };
 
+const runUserDesktopVideoTour = async (page: Page, theme: ThemeMode = 'light') => {
+  await page.setViewportSize({ width: 1440, height: 1024 });
+  await installTheme(page, theme);
+  await installApiMocks(page, freeUser, false);
+
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.goto('/signup');
+  await expect(page.getByRole('heading', { name: /create account/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await bootstrapSession(page, freeUser);
+
+  await page.goto('/dashboard/analysis');
+  await expect(page.getByText(/ATS Resume Analyzer/i)).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel('Open settings').click();
+  await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel('Toggle AI model selection').click();
+  await closeSettingsPanel(page);
+  await expect(page.getByText(/AI Model Selection/i)).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button', { name: /show models/i }).click();
+  await expect(page.getByRole('button', { name: /OpenRouter Free/i }).first()).toBeVisible();
+  await pauseForTour(page);
+
+  await page.setInputFiles('#resume-upload', {
+    name: 'tour-resume.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 mock resume content'),
+  });
+  await page
+    .getByPlaceholder(/Paste the complete job description here/i)
+    .fill('We need a Senior Frontend Engineer with React, TypeScript, accessibility, performance optimization, and cross-team collaboration.');
+  await pauseForTour(page);
+
+  await expect(page.getByRole('button', { name: /Analyze Resume/i }).first()).toBeEnabled();
+  await page.getByRole('button', { name: /Analyze Resume/i }).first().click();
+  await expect(page).toHaveURL(/\/analysis\/analysis-001/);
+  await expect(page.getByRole('heading', { name: /Analysis Results/i })).toBeVisible();
+  await pauseForTour(page, 900);
+
+  await page.getByRole('button', { name: /Back to Dashboard/i }).first().click();
+  await expect(page).toHaveURL(/\/dashboard/);
+  await pauseForTour(page, 500);
+
+  await page.goto('/dashboard/resumes');
+  await expect(page.getByRole('heading', { name: /my resumes/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page
+    .getByRole('button')
+    .filter({ hasText: /Senior Frontend Engineer Resume/i })
+    .first()
+    .click();
+  await expect(page.getByText(/Resume Analysis/i)).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button', { name: /^Original$/i }).click();
+  await pauseForTour(page, 350);
+  await page.getByRole('button', { name: /^PDF$/i }).click();
+  await pauseForTour(page, 350);
+  await page.getByRole('button', { name: /^Word$/i }).click();
+  await pauseForTour(page, 350);
+
+  await page.locator('#jobDescription').fill(
+    'Seeking a senior engineer who can lead frontend architecture, mentor teammates, and improve Core Web Vitals.'
+  );
+  await page.getByRole('button', { name: /Analyze Resume Match/i }).click();
+  await expect(page).toHaveURL(/\/analysis\/analysis-001/);
+  await pauseForTour(page, 800);
+
+  await page.getByRole('button', { name: /Back to Dashboard/i }).first().click();
+  await page.goto('/dashboard/resumes');
+  await page
+    .getByRole('button')
+    .filter({ hasText: /Senior Frontend Engineer Resume/i })
+    .first()
+    .click();
+  await expect(page.getByText(/Resume Analysis/i)).toBeVisible();
+  await pauseForTour(page, 300);
+
+  await page.getByRole('button', { name: /^Edit$/i }).first().click();
+  await expect(page.getByRole('heading', { name: /Edit Resume/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button', { name: /^Preview Resume$/i }).first().click();
+  await expect(page.getByRole('heading', { name: /Resume Preview/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel(/Close preview/i).click();
+  await pauseForTour(page, 400);
+
+  await page.getByLabel(/close form/i).click();
+  await pauseForTour(page, 400);
+
+  await page.getByRole('button', { name: /Create New Resume/i }).first().click();
+  await expect(page.getByRole('heading', { name: /Create New Resume/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button', { name: /^Cancel$/i }).first().click();
+  await pauseForTour(page, 400);
+
+  await page.goto('/dashboard/history');
+  await expect(page.getByRole('heading', { name: /Analysis History/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button').filter({ hasText: /Senior Frontend Engineer/i }).first().click();
+  await expect(page).toHaveURL(/\/analysis\/analysis-001/);
+  await pauseForTour(page, 800);
+  await page.getByRole('button', { name: /Back to Dashboard/i }).first().click();
+  await page.goto('/dashboard/history');
+  await expect(page.getByRole('heading', { name: /Analysis History/i })).toBeVisible();
+  await pauseForTour(page, 400);
+
+  await page.getByRole('button', { name: /Add Job Description/i }).click();
+  await expect(page.getByRole('heading', { name: /Create New Job Description|Edit Job Description/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.locator('#job-title').fill('Senior Frontend Engineer - Platform');
+  await page.locator('#job-description').fill(
+    'We are hiring a Senior Frontend Engineer with strong React and TypeScript experience and platform architecture ownership.'
+  );
+  await page.getByRole('button', { name: /^Create$/i }).click();
+  await pauseForTour(page);
+
+  await page.getByLabel(/Edit job description/i).first().click();
+  await expect(page.getByRole('heading', { name: /Edit Job Description/i })).toBeVisible();
+  await page.locator('#job-title').fill('Senior Frontend Engineer - Platform (Updated)');
+  await page.getByRole('button', { name: /^Update$/i }).click();
+  await pauseForTour(page);
+
+  page.once('dialog', async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByLabel(/Delete job description/i).first().click();
+  await pauseForTour(page);
+
+  await page.goto('/analysis/analysis-001');
+  await expect(page.getByRole('heading', { name: /Analysis Results/i })).toBeVisible();
+  await pauseForTour(page, 900);
+
+  await page.goto('/dashboard/analysis');
+  await page.getByRole('button', { name: /logout/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+  await pauseForTour(page, 700);
+};
+
+const runAdminDesktopVideoTour = async (page: Page, theme: ThemeMode = 'light') => {
+  await page.setViewportSize({ width: 1440, height: 1024 });
+  await installTheme(page, theme);
+  await installApiMocks(page, adminUser, true);
+  await bootstrapSession(page, adminUser);
+
+  await page.goto('/dashboard/analysis');
+  await expect(page.getByRole('link', { name: /Open Admin Console/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('link', { name: /Open Admin Console/i }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole('heading', { name: /User Operations/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel(/search users/i).fill('candidate.one');
+  await expect(page.getByText(/candidate.one@example.com/i)).toBeVisible();
+  await pauseForTour(page);
+
+  const targetCard = page.getByRole('button').filter({ hasText: /candidate.one@example.com/i }).first();
+  await targetCard.click();
+  await expect(page.getByRole('heading', { name: /candidate.one@example.com/i })).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel(/first name/i).fill('Candidate');
+  await page.getByLabel(/last name/i).fill('One Updated');
+  await page.getByLabel(/subscription tier/i).selectOption('pro');
+  await page.getByRole('button', { name: /save changes/i }).click();
+  await expect(page.getByText(/user profile updated/i)).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByLabel(/new password/i).fill('TempPassword123!');
+  await page.getByRole('button', { name: /set new password/i }).click();
+  await expect(page.getByText(/password updated and/i)).toBeVisible();
+  await pauseForTour(page);
+
+  await page.getByRole('button', { name: /revoke all sessions/i }).click();
+  await expect(page.getByText(/active session\(s\) revoked/i)).toBeVisible();
+
+  const auditTrailHeading = page.getByRole('heading', { name: /audit trail/i });
+  await auditTrailHeading.scrollIntoViewIfNeeded();
+  await expect(auditTrailHeading).toBeVisible();
+  await pauseForTour(page, 1000);
+
+  await page.getByRole('link', { name: /Back To Dashboard/i }).click();
+  await expect(page).toHaveURL(/\/dashboard\/analysis/);
+  await pauseForTour(page, 600);
+};
+
 const captureDesktopJourney = async (page: Page, theme: ThemeMode) => {
   await page.setViewportSize({ width: 1440, height: 1024 });
   await installTheme(page, theme);
@@ -538,7 +881,7 @@ const captureDesktopJourney = async (page: Page, theme: ThemeMode) => {
   await takeShot(page, theme, 'desktop', '04-settings-panel');
 
   await page.getByLabel('Toggle AI model selection').click();
-  await page.getByLabel('Close settings').click();
+  await closeSettingsPanel(page);
   await expect(page.getByText(/AI Model Selection/i)).toBeVisible();
   await takeShot(page, theme, 'desktop', '05-model-selector');
 
@@ -601,6 +944,16 @@ const captureDesktopJourney = async (page: Page, theme: ThemeMode) => {
   await page.getByLabel(/search users/i).fill('candidate.one');
   await expect(page.getByText(/candidate.one@example.com/i)).toBeVisible();
   await takeShot(page, theme, 'desktop', '17-admin-search-filtered');
+
+  const targetCard = page.getByRole('button').filter({ hasText: /candidate.one@example.com/i }).first();
+  await targetCard.click();
+  await expect(page.getByRole('heading', { name: /candidate.one@example.com/i })).toBeVisible();
+  await takeShot(page, theme, 'desktop', '18-admin-user-detail');
+
+  const auditTrailHeading = page.getByRole('heading', { name: /audit trail/i });
+  await auditTrailHeading.scrollIntoViewIfNeeded();
+  await expect(auditTrailHeading).toBeVisible();
+  await takeShot(page, theme, 'desktop', '19-admin-audit-trail', { fullPage: false });
 };
 
 const captureMobileJourney = async (page: Page, theme: ThemeMode) => {
@@ -653,6 +1006,46 @@ test.describe('@tour presentation screenshot capture', () => {
       test.setTimeout(120000);
       test.skip(test.info().project.name !== 'Mobile Chrome', 'Mobile tour capture runs only on Mobile Chrome.');
       await captureMobileJourney(page, theme);
+    });
+  }
+});
+
+test.describe('@tour-video end-to-end video capture', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`@tour-video captures complete user feature tour (desktop, ${theme})`, async ({ browser }) => {
+      test.setTimeout(240000);
+      test.skip(test.info().project.name !== 'chromium', 'User video tour runs only on chromium.');
+
+      const context = await browser.newContext({
+        baseURL: 'http://127.0.0.1:4010',
+        recordVideo: {
+          dir: ensureVideoFolder(),
+          size: { width: 1440, height: 1024 },
+        },
+      });
+      const page = await context.newPage();
+
+      await runUserDesktopVideoTour(page, theme);
+      await saveTourVideo(page, `tour-user-desktop-${theme}`);
+    });
+
+    test(`@tour-video captures complete admin feature tour (desktop, ${theme})`, async ({ browser }) => {
+      test.setTimeout(180000);
+      test.skip(test.info().project.name !== 'chromium', 'Admin video tour runs only on chromium.');
+
+      const context = await browser.newContext({
+        baseURL: 'http://127.0.0.1:4010',
+        recordVideo: {
+          dir: ensureVideoFolder(),
+          size: { width: 1440, height: 1024 },
+        },
+      });
+      const page = await context.newPage();
+
+      await runAdminDesktopVideoTour(page, theme);
+      await saveTourVideo(page, `tour-admin-desktop-${theme}`);
     });
   }
 });

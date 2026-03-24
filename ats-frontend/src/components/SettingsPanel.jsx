@@ -154,7 +154,7 @@ const SettingsPanel = ({
                   </div>
                   {!showModelSelector && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Using default model: Gemini 2.0 Flash
+                      Using default model: OpenRouter Free
                     </p>
                   )}
                 </div>

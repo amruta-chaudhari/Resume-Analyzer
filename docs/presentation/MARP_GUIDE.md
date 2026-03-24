@@ -83,6 +83,32 @@ The deck is structured with ~120 minutes of content across 45 main slides + 12 o
 - **Slides 40–45:** Review + Close (12 min)
 - **Backup Slides:** Deep dives on demand
 
+## End-to-End Video Tours (User + Admin)
+
+The presentation package now includes deterministic feature-tour video generation from Playwright.
+
+Generated files:
+- `docs/presentation/videos/tour-user-desktop-light.webm`
+- `docs/presentation/videos/tour-user-desktop-dark.webm`
+- `docs/presentation/videos/tour-admin-desktop-light.webm`
+- `docs/presentation/videos/tour-admin-desktop-dark.webm`
+
+Coverage checklist:
+- User flow: auth entry screens, settings/model selector, resume upload + analyze, analysis results, resume management actions, history navigation, job-description CRUD, logout.
+- Admin flow: admin console entry, user search/select, profile update, password reset, session revocation, audit trail visibility, return-to-dashboard.
+
+Run from repo root:
+
+```bash
+npm --prefix ats-frontend run test:tour:video
+```
+
+Equivalent direct command:
+
+```bash
+npx --prefix ats-frontend playwright test ats-frontend/tests/e2e/tour-presentation.spec.ts --project=chromium -g @tour-video
+```
+
 ## Customization
 
 ### Change Theme
