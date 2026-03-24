@@ -30,13 +30,13 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph Client
-      FE[React + Vite SPA\n(Zustand, Axios)]
+      FE["React + Vite SPA\n(Zustand, Axios)"]
     end
 
     subgraph Server
       API[Express API\nRoutes + Middleware]
-      Q[Analysis Queue/Worker\n(Bull-style async processing)]
-      SVC[Service Layer\n(Auth, Resume, AI, File)]
+      Q["Analysis Queue/Worker\n(Bull-style async processing)"]
+      SVC["Service Layer\n(Auth, Resume, AI, File)"]
     end
 
     subgraph Data
@@ -59,7 +59,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    R[Routes] --> M[Middleware\n(auth, error, rate-limit)]
+    R[Routes] --> M["Middleware\n(auth, error, rate-limit)"]
     M --> SV[Services]
     SV --> PR[Prisma Client]
     SV --> FS[File Storage Service]
