@@ -1,5 +1,8 @@
 import OpenAI from 'openai';
 import axios from 'axios';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { systemSettingsService } from './system-settings.service';
 import type {
   AIModel,
   ModelCache,
@@ -11,19 +14,6 @@ import type {
   HealthCheckResponse,
 } from '../types/index';
 
-// Lazy initialization of OpenAI client
-let _openai: OpenAI | null = null;
-const AI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
-const getOpenAIClient = (): OpenAI => {
-  if (!_openai) {
-    _openai = new OpenAI({
-      apiKey: AI_API_KEY,
-      baseURL: process.env.BASE_URL || 'https://openrouter.ai/api/v1',
-    });
-  }
-  return _openai;
-};
-
 // Model cache with 24-hour expiration
 let modelCache: ModelCache = {
     data: [],
@@ -34,15 +24,6 @@ let modelFetchPromise: Promise<AIModel[]> | null = null;
 
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'openrouter/free';
-const AI_REQUEST_TIMEOUT_MS = Number.parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '60000', 10);
-const AI_MAX_RETRIES = Number.parseInt(process.env.AI_MAX_RETRIES || '2', 10);
-
-const REQUEST_TIMEOUT_MS = Number.isFinite(AI_REQUEST_TIMEOUT_MS) && AI_REQUEST_TIMEOUT_MS > 0
-    ? AI_REQUEST_TIMEOUT_MS
-    : 60000;
-const MAX_RETRIES = Number.isFinite(AI_MAX_RETRIES) && AI_MAX_RETRIES >= 0
-    ? AI_MAX_RETRIES
-    : 2;
 
 const createDefaultModel = (): AIModel => ({
     id: DEFAULT_MODEL,
@@ -145,6 +126,124 @@ export class AIService {
 
         modelFetchPromise = (async () => {
             try {
+                const settings = await systemSettingsService.getSettings();
+                const provider = settings.activeAiProvider || 'openrouter';
+
+                if (provider === 'anthropic') {
+                    const apiKey = settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '';
+                    if (!apiKey) throw new Error('Anthropic API key not configured');
+                    
+                    try {
+                        const response = await axios.get('https://api.anthropic.com/v1/models', {
+                            headers: {
+                                'x-api-key': apiKey,
+                                'anthropic-version': '2023-06-01'
+                            }
+                        });
+                        
+                        const fetchedModels: AIModel[] = response.data.data.map((m: any) => ({
+                            id: m.id,
+                            name: m.display_name || m.id,
+                            provider: 'Anthropic',
+                            context_length: m.id.includes('3.5') ? 200000 : 200000,
+                            supported_parameters: ['temperature', 'max_tokens'],
+                            created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : Math.floor(now/1000),
+                            description: `Anthropic ${m.id} model`,
+                            recommended: m.id.includes('haiku')
+                        }));
+                        
+                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
+                    } catch (error) {
+                        console.error('Failed to fetch Anthropic models via API. Falling back to default list.', error);
+                        // Fallback list
+                        modelCache.data = [{
+                            id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', provider: 'Anthropic',
+                            context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                            created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true
+                        }, {
+                            id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', provider: 'Anthropic',
+                            context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                            created: Math.floor(now/1000), description: 'Most intelligent model'
+                        }];
+                    }
+                    
+                    modelCache.lastFetched = Date.now();
+                    return modelCache.data;
+                } else if (provider === 'gemini') {
+                    const apiKey = settings.geminiKey || process.env.GEMINI_API_KEY || '';
+                    if (!apiKey) throw new Error('Gemini API key not configured');
+                    
+                    try {
+                        const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                        const fetchedModels: AIModel[] = response.data.models
+                            .filter((m: any) => m.name.includes('gemini'))
+                            .map((m: any) => ({
+                                id: m.name.replace('models/', ''),
+                                name: m.displayName || m.name.replace('models/', ''),
+                                provider: 'Google',
+                                context_length: m.inputTokenLimit || 1048576,
+                                supported_parameters: ['temperature', 'max_tokens'],
+                                created: Math.floor(now/1000),
+                                description: m.description || 'Google Gemini Model',
+                                recommended: m.name.includes('flash')
+                            }));
+                            
+                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
+                    } catch (error) {
+                        console.error('Failed to fetch Gemini models via API. Falling back to default list.', error);
+                        modelCache.data = [{
+                            id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google',
+                            context_length: 1048576, supported_parameters: ['temperature', 'max_tokens'],
+                            created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true
+                        }, {
+                            id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google',
+                            context_length: 2097152, supported_parameters: ['temperature', 'max_tokens'],
+                            created: Math.floor(now/1000), description: 'Most capable model'
+                        }];
+                    }
+                    
+                    modelCache.lastFetched = Date.now();
+                    return modelCache.data;
+                } else if (provider === 'openai') {
+                    const apiKey = settings.openAiKey || process.env.OPENAI_API_KEY || '';
+                    if (!apiKey) throw new Error('OpenAI API key not configured');
+                    
+                    try {
+                        const openai = new OpenAI({ apiKey });
+                        const response = await openai.models.list();
+                        
+                        const fetchedModels: AIModel[] = response.data
+                            .filter((m: any) => m.id.includes('gpt'))
+                            .map((m: any) => ({
+                                id: m.id,
+                                name: m.id,
+                                provider: 'OpenAI',
+                                context_length: m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
+                                supported_parameters: ['temperature', 'max_tokens'],
+                                created: m.created || Math.floor(now/1000),
+                                description: `OpenAI ${m.id} model`,
+                                recommended: m.id.includes('gpt-4o-mini') || m.id.includes('gpt-3.5-turbo')
+                            }));
+                            
+                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
+                    } catch (error) {
+                        console.error('Failed to fetch OpenAI models via API. Falling back to default list.', error);
+                        modelCache.data = [{
+                            id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI',
+                            context_length: 16385, supported_parameters: ['temperature', 'max_tokens'],
+                            created: Math.floor(now/1000), description: 'Standard capable model', recommended: true
+                        }, {
+                             id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI',
+                             context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                             created: Math.floor(now/1000), description: 'Most advanced model'
+                        }];
+                    }
+                    
+                    modelCache.lastFetched = Date.now();
+                    return modelCache.data;
+                }
+
+                // Default OpenRouter behavior
                 const response = await axios.get('https://openrouter.ai/api/v1/models');
 
                 // Filter and format models
@@ -207,8 +306,6 @@ export class AIService {
         selectedModel?: string,
         modelParameters?: ModelParameters
     ): Promise<AnalysisResult> {
-        const model = selectedModel || DEFAULT_MODEL;
-
         // Pre-analyze formatting issues
         const formattingAnalysis = this.analyzeFormattingIssues(text);
 
@@ -249,7 +346,7 @@ Please provide a comprehensive analysis in the following JSON format:
   },
   "actionableAdvice": [<array of specific, actionable recommendations for the candidate>],
   "modelUsed": {
-    "id": "${model}",
+    "id": "<model used>",
     "name": "<model display name>",
     "provider": "<provider name>"
   }
@@ -308,38 +405,68 @@ Focus on these rules:
 
 6.  **Overall Score**: The overallScore should reflect the resume's overall ATS compatibility and readiness for the application.
 
-Be thorough but concise. Provide specific examples and actionable advice based on the rules above.
+Be thorough but concise. Provide specific examples and actionable advice based on the rules above. Keep formatting exactly as JSON.
 `;
 
         try {
-            // Build completion parameters with defaults and user overrides
-            const completionParams: CompletionParameters = {
-                model: model,
-                messages: [
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: modelParameters?.temperature ?? 0.15,
-                max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 16000),
-                seed: 42, // Fixed seed for reproducibility
-            };
+            const settings = await systemSettingsService.getSettings();
+            const provider = settings.activeAiProvider || 'openrouter';
+            let responseText = '';
+            let finalModel = selectedModel || 'default';
 
-            // Add reasoning if enabled
-            if (modelParameters?.include_reasoning) {
-                completionParams.reasoning_effort = 'medium'; // Can be 'low', 'medium', or 'high'
+            if (provider === 'anthropic') {
+                finalModel = selectedModel || 'claude-3-haiku-20240307';
+                const anthropic = new Anthropic({ apiKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '' });
+                const completion = await anthropic.messages.create({
+                    model: finalModel,
+                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 4096),
+                    temperature: modelParameters?.temperature ?? 0.15,
+                    messages: [{ role: 'user', content: prompt }]
+                });
+                responseText = completion.content[0].type === 'text' ? completion.content[0].text : '';
+            } else if (provider === 'gemini') {
+                finalModel = selectedModel || 'gemini-1.5-flash';
+                const genAI = new GoogleGenerativeAI(settings.geminiKey || process.env.GEMINI_API_KEY || '');
+                const genModel = genAI.getGenerativeModel({ model: finalModel });
+                const result = await genModel.generateContent(prompt);
+                responseText = result.response.text();
+            } else if (provider === 'openai') {
+                finalModel = selectedModel || 'gpt-3.5-turbo';
+                const openai = new OpenAI({ apiKey: settings.openAiKey || process.env.OPENAI_API_KEY || '' });
+                const completion = await openai.chat.completions.create({
+                    model: finalModel,
+                    temperature: modelParameters?.temperature ?? 0.15,
+                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 4096),
+                    messages: [{ role: 'user', content: prompt }]
+                });
+                responseText = completion.choices[0]?.message?.content || '';
+            } else {
+                // OpenRouter
+                finalModel = selectedModel || DEFAULT_MODEL;
+                const openrouter = new OpenAI({
+                    apiKey: settings.openRouterKey || process.env.OPENROUTER_API_KEY || '',
+                    baseURL: 'https://openrouter.ai/api/v1',
+                });
+                const completionParams: CompletionParameters = {
+                    model: finalModel,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: modelParameters?.temperature ?? 0.15,
+                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 16000),
+                    seed: 42,
+                };
+                if (modelParameters?.include_reasoning) {
+                    completionParams.reasoning_effort = 'medium';
+                }
+                const completion = await openrouter.chat.completions.create(completionParams as any);
+                responseText = (completion as OpenAICompletion).choices[0]?.message?.content || '';
             }
 
-            const completion = await getOpenAIClient().chat.completions.create(completionParams as any);
-
-            const response = (completion as OpenAICompletion).choices[0]?.message?.content;
-            if (!response) {
+            if (!responseText) {
                 throw new Error('No response from AI model');
             }
 
             // Extract JSON from markdown code blocks if present
-            let jsonString = response.trim();
+            let jsonString = responseText.trim();
             if (jsonString.startsWith('```json')) {
                 jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
             } else if (jsonString.startsWith('```')) {
@@ -350,10 +477,16 @@ Be thorough but concise. Provide specific examples and actionable advice based o
             const analysisResult = JSON.parse(jsonString) as AnalysisResult;
 
             // Ensure the response has the expected structure
-            // Note: Use == null to catch both null and undefined, since overallScore of 0 is valid
             if (analysisResult.overallScore == null || !analysisResult.skillsAnalysis || !analysisResult.formattingScore) {
                 throw new Error('Invalid response format from AI model');
             }
+            
+            // Set the model used metadata
+            analysisResult.modelUsed = {
+                id: finalModel,
+                name: finalModel,
+                provider: provider
+            };
 
             return analysisResult;
 
@@ -364,7 +497,7 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 : undefined;
 
             if (status === 401 || status === 403) {
-                throw new Error('AI provider authentication failed. Check OPENROUTER_API_KEY or OPENAI_API_KEY and provider access.');
+                throw new Error('AI provider authentication failed. Check API Keys and provider access.');
             }
 
             if (status === 429) {
@@ -377,9 +510,13 @@ Be thorough but concise. Provide specific examples and actionable advice based o
 
     async checkHealth(): Promise<HealthCheckResponse> {
         try {
+            const settings = await systemSettingsService.getSettings();
+            if (settings.activeAiProvider !== 'openrouter') {
+                return { status: 'healthy', openrouter: true, models: 1 };
+            }
+
             // Test OpenRouter API connectivity
             const response = await axios.get('https://openrouter.ai/api/v1/models');
-
             return {
                 status: 'healthy',
                 openrouter: true,

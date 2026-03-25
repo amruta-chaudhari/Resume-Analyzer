@@ -40,10 +40,13 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
       
       setModels(sortedModels);
       
-      // Set default model if none selected and models are available
-      if (!selectedModel && sortedModels.length > 0) {
-        const defaultModel = sortedModels.find(m => m.id === DEFAULT_MODEL) || sortedModels[0];
-        onModelSelect(defaultModel.id);
+      // Ensure a valid model is selected
+      if (sortedModels.length > 0) {
+        const selectedExists = sortedModels.some(m => m.id === selectedModel);
+        if (!selectedExists) {
+          const defaultModel = sortedModels.find(m => m.id === DEFAULT_MODEL) || sortedModels[0];
+          onModelSelect(defaultModel.id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch models:', err);
@@ -106,10 +109,10 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(model => 
-        model.name.toLowerCase().includes(query) ||
-        model.provider.toLowerCase().includes(query) ||
-        model.description.toLowerCase().includes(query) ||
-        model.id.toLowerCase().includes(query)
+        (model.name || '').toLowerCase().includes(query) ||
+        (model.provider || '').toLowerCase().includes(query) ||
+        (model.description || '').toLowerCase().includes(query) ||
+        (model.id || '').toLowerCase().includes(query)
       );
     }
 

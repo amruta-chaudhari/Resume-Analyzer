@@ -2,6 +2,7 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import { adminService } from '../services/adminService';
+import SystemSettingsPanel from '../components/admin/SystemSettingsPanel';
 
 const formatDateTime = (value) => {
   if (!value) {
@@ -59,6 +60,7 @@ const AdminPage = () => {
   const currentUser = useAuthStore((state) => state.user);
   const updateCurrentUser = useAuthStore((state) => state.updateUser);
 
+  const [activeTab, setActiveTab] = useState('users');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [users, setUsers] = useState([]);
@@ -321,8 +323,26 @@ const AdminPage = () => {
               </Link>
             </div>
           </div>
+
+          <div className="mt-6 flex gap-6 border-b border-white/20">
+            <button
+               type="button"
+               onClick={() => setActiveTab('users')}
+               className={`pb-3 text-sm font-semibold transition ${activeTab === 'users' ? 'border-b-2 border-cyan-400 text-cyan-600 dark:text-cyan-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            >
+              User Management
+            </button>
+            <button
+               type="button"
+               onClick={() => setActiveTab('system')}
+               className={`pb-3 text-sm font-semibold transition ${activeTab === 'system' ? 'border-b-2 border-cyan-400 text-cyan-600 dark:text-cyan-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            >
+              System Configuration
+            </button>
+          </div>
         </div>
 
+        {activeTab === 'users' ? (
         <div className="mb-6 grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className="glass-strong rounded-3xl p-5">
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200" htmlFor="admin-search">
@@ -800,6 +820,9 @@ const AdminPage = () => {
             )}
           </div>
         </div>
+        ) : (
+          <SystemSettingsPanel />
+        )}
       </div>
     </div>
   );

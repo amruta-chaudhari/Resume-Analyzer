@@ -10,6 +10,7 @@ import {
   healthRoutes,
   templateRoutes,
   adminRoutes,
+  adminSettingsRoutes,
 } from './routes/index';
 import { authMiddleware } from './middleware/auth.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
@@ -195,6 +196,7 @@ app.use('/api', analysisRoutes); // POST /analyze, GET /analyses, GET /analysis/
 app.use('/api', jobDescriptionsRoutes); // GET/POST/PUT/DELETE /job-descriptions
 app.use('/api', healthRoutes); // GET /health, GET /health/upstream
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminSettingsRoutes);
 
 // Legacy health check endpoint (kept for backward compatibility)
 app.get('/health-legacy', (req, res) => {

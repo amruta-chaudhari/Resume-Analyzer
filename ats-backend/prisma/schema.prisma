@@ -360,3 +360,18 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model SystemSetting {
+  id              String   @id @default("global")
+  
+  // AI Settings
+  activeAiProvider String  @default("openrouter") // openrouter, openai, gemini, anthropic
+  openRouterKey   String?
+  openAiKey       String?
+  geminiKey       String?
+  anthropicKey    String?
+  
+  updatedAt       DateTime @updatedAt
+
+  @@map("system_settings")
+}

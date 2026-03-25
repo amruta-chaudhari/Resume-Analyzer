@@ -27,6 +27,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",

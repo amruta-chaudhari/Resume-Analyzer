@@ -27,4 +27,14 @@ export const adminService = {
     const response = await apiClient.post(`/api/admin/users/${userId}/revoke-sessions`);
     return response.data.data;
   },
+
+  async getSystemSettings() {
+    const response = await apiClient.get('/api/admin/settings');
+    return response.data.data;
+  },
+
+  async updateSystemSettings(payload) {
+    const response = await apiClient.patch('/api/admin/settings', payload);
+    return response.data.data;
+  },
 };

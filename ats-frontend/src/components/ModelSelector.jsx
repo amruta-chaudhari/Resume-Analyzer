@@ -43,6 +43,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
    * Utility function to truncate description text
    */
   const truncateDescription = (description) => {
+    if (!description) return '';
     const maxLength = isMobile ? 120 : 260;
     if (description.length <= maxLength) return description;
     return description.substring(0, maxLength).trim() + '...';
@@ -164,7 +165,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                 )}
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                {currentModel.description}
+                {currentModel.description || ''}
               </p>
               <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                 <span>Provider: {currentModel.provider}</span>
@@ -246,11 +247,11 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                           isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300'
                         }`}>
                           {expandedDescriptions.has(model.id) 
-                            ? model.description 
+                            ? (model.description || '')
                             : truncateDescription(model.description)
                           }
                         </p>
-                        {model.description.length > (isMobile ? 120 : 260) && (
+                        {(model.description?.length || 0) > (isMobile ? 120 : 260) && (
                           <button
                             onClick={(e) => toggleDescription(model.id, e)}
                             className={`text-xs mt-1 transition-colors duration-200 ${
