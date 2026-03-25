@@ -6,6 +6,8 @@ export interface SystemSettingsUpdate {
   openAiKey?: string | null;
   geminiKey?: string | null;
   anthropicKey?: string | null;
+  allowedModels?: string | null;
+  modelPricing?: string | null;
 }
 
 export class SystemSettingsService {
@@ -29,6 +31,8 @@ export class SystemSettingsService {
       openAiKey: settings.openAiKey || process.env.OPENAI_API_KEY || null,
       geminiKey: settings.geminiKey || process.env.GEMINI_API_KEY || null,
       anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY || null,
+      allowedModels: settings.allowedModels || null,
+      modelPricing: settings.modelPricing || null,
     };
   }
 
@@ -44,6 +48,8 @@ export class SystemSettingsService {
         openAiKey: data.openAiKey !== undefined ? data.openAiKey : undefined,
         geminiKey: data.geminiKey !== undefined ? data.geminiKey : undefined,
         anthropicKey: data.anthropicKey !== undefined ? data.anthropicKey : undefined,
+        allowedModels: data.allowedModels !== undefined ? data.allowedModels : undefined,
+        modelPricing: data.modelPricing !== undefined ? data.modelPricing : undefined,
       },
       create: {
         id: 'global',
@@ -52,6 +58,8 @@ export class SystemSettingsService {
         openAiKey: data.openAiKey,
         geminiKey: data.geminiKey,
         anthropicKey: data.anthropicKey,
+        allowedModels: data.allowedModels,
+        modelPricing: data.modelPricing,
       },
     });
 

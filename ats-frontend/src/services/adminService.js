@@ -37,4 +37,9 @@ export const adminService = {
     const response = await apiClient.patch('/api/admin/settings', payload);
     return response.data.data;
   },
+
+  async getModels() {
+    const response = await apiClient.get('/api/admin/models');
+    return response.data.data;
+  },
 };

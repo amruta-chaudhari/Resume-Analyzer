@@ -23,16 +23,16 @@ let modelCache: ModelCache = {
 let modelFetchPromise: Promise<AIModel[]> | null = null;
 
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'openrouter/free';
+const DEFAULT_MODEL = process.env.ANALYSIS_MODEL || 'openai/gpt-5.4-mini';
 
 const createDefaultModel = (): AIModel => ({
     id: DEFAULT_MODEL,
-    name: 'OpenRouter Free',
-    provider: 'OpenRouter',
+    name: 'GPT-5.4 Mini',
+    provider: 'OpenAI',
     context_length: 128000,
     supported_parameters: ['temperature', 'max_tokens'],
     created: Math.floor(Date.now() / 1000),
-    description: 'OpenRouter route that selects an available free model for the request.',
+    description: 'Fast, affordable, modern model defaulting for ATS requests.',
     recommended: true,
 });
 
@@ -107,13 +107,9 @@ export class AIService {
 
         return { detectedIssues, formattingHints };
     }
-    async getAvailableModels(): Promise<AIModel[]> {
+    async getAvailableModels(checkCache: boolean = true, skipFilter: boolean = false): Promise<AIModel[]> {
         const now = Date.now();
-
-        // Return cached data if still valid
-        if (modelCache.data.length > 0 &&
-            modelCache.lastFetched &&
-            (now - modelCache.lastFetched) < CACHE_DURATION) {
+        if (checkCache && !skipFilter && modelCache.data.length > 0 && modelCache.lastFetched && (now - modelCache.lastFetched < CACHE_DURATION)) {
             return modelCache.data;
         }
 
@@ -145,8 +141,12 @@ export class AIService {
                             id: m.id,
                             name: m.display_name || m.id,
                             provider: 'Anthropic',
-                            context_length: m.id.includes('3.5') ? 200000 : 200000,
+                            context_length: m.id.includes('4.') || m.id.includes('3.5') ? 200000 : 200000,
                             supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { 
+                                prompt: m.id.includes('opus') ? '0.000015' : m.id.includes('haiku') ? '0.0000008' : '0.000003',
+                                completion: m.id.includes('opus') ? '0.000075' : m.id.includes('haiku') ? '0.000004' : '0.000015'
+                            },
                             created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : Math.floor(now/1000),
                             description: `Anthropic ${m.id} model`,
                             recommended: m.id.includes('haiku')
@@ -157,12 +157,14 @@ export class AIService {
                         console.error('Failed to fetch Anthropic models via API. Falling back to default list.', error);
                         // Fallback list
                         modelCache.data = [{
-                            id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', provider: 'Anthropic',
+                            id: 'claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'Anthropic',
                             context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { prompt: '0.0000008', completion: '0.000004' },
                             created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true
                         }, {
-                            id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', provider: 'Anthropic',
+                            id: 'claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'Anthropic',
                             context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { prompt: '0.000003', completion: '0.000015' },
                             created: Math.floor(now/1000), description: 'Most intelligent model'
                         }];
                     }
@@ -176,13 +178,17 @@ export class AIService {
                     try {
                         const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
                         const fetchedModels: AIModel[] = response.data.models
-                            .filter((m: any) => m.name.includes('gemini'))
+                            .filter((m: any) => m.name.includes('gemini') && !m.name.includes('embedding'))
                             .map((m: any) => ({
                                 id: m.name.replace('models/', ''),
                                 name: m.displayName || m.name.replace('models/', ''),
                                 provider: 'Google',
-                                context_length: m.inputTokenLimit || 1048576,
+                                context_length: m.inputTokenLimit || (m.name.includes('pro') ? 2097152 : 1048576),
                                 supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: {
+                                    prompt: m.name.includes('lite') ? '0.00000005' : m.name.includes('flash') ? '0.000000075' : m.name.includes('pro') ? '0.00000125' : '0.000000075',
+                                    completion: m.name.includes('lite') ? '0.0000002' : m.name.includes('flash') ? '0.0000003' : m.name.includes('pro') ? '0.000005' : '0.0000003'
+                                },
                                 created: Math.floor(now/1000),
                                 description: m.description || 'Google Gemini Model',
                                 recommended: m.name.includes('flash')
@@ -192,12 +198,14 @@ export class AIService {
                     } catch (error) {
                         console.error('Failed to fetch Gemini models via API. Falling back to default list.', error);
                         modelCache.data = [{
-                            id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google',
+                            id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google',
                             context_length: 1048576, supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { prompt: '0.000000075', completion: '0.0000003' },
                             created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true
                         }, {
-                            id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google',
+                            id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google',
                             context_length: 2097152, supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { prompt: '0.00000125', completion: '0.000005' },
                             created: Math.floor(now/1000), description: 'Most capable model'
                         }];
                     }
@@ -213,28 +221,57 @@ export class AIService {
                         const response = await openai.models.list();
                         
                         const fetchedModels: AIModel[] = response.data
-                            .filter((m: any) => m.id.includes('gpt'))
-                            .map((m: any) => ({
-                                id: m.id,
-                                name: m.id,
-                                provider: 'OpenAI',
-                                context_length: m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
-                                supported_parameters: ['temperature', 'max_tokens'],
-                                created: m.created || Math.floor(now/1000),
-                                description: `OpenAI ${m.id} model`,
-                                recommended: m.id.includes('gpt-4o-mini') || m.id.includes('gpt-3.5-turbo')
-                            }));
+                            .filter((m: any) => {
+                                if (!m.id.includes('gpt') && !m.id.includes('o1') && !m.id.includes('o3')) return false;
+                                
+                                // Filter out historical implicitly-dated snapshots (like -0613, -1106, -2024-05-13)
+                                const isDated = /-\d{4}/.test(m.id);
+                                const isSpecificOrBeta = m.id.includes('vision') || m.id.includes('instruct') || m.id.includes('realtime') || m.id.includes('audio');
+                                
+                                return !isDated && !isSpecificOrBeta;
+                            })
+                            .map((m: any) => {
+                                let promptPrice = '0.0000025';
+                                let compPrice = '0.000010';
+                                
+                                // March 2026 Pricing
+                                if (m.id.includes('5.2-pro')) { promptPrice = '0.000021'; compPrice = '0.000168'; }
+                                else if (m.id.includes('5.4') && m.id.includes('mini')) { promptPrice = '0.00000075'; compPrice = '0.0000045'; }
+                                else if (m.id.includes('5.4') && m.id.includes('nano')) { promptPrice = '0.0000002'; compPrice = '0.00000125'; }
+                                else if (m.id.includes('5.4')) { promptPrice = '0.0000025'; compPrice = '0.000015'; }
+                                else if (m.id.includes('5.2')) { promptPrice = '0.00000175'; compPrice = '0.000014'; }
+                                else if (m.id.includes('gpt-5') && m.id.includes('mini')) { promptPrice = '0.00000025'; compPrice = '0.000002'; }
+                                else if (m.id.includes('gpt-5') && m.id.includes('nano')) { promptPrice = '0.00000005'; compPrice = '0.0000004'; }
+                                else if (m.id.includes('gpt-5')) { promptPrice = '0.00000125'; compPrice = '0.000010'; }
+                                else if (m.id.includes('o1')) { promptPrice = '0.000015'; compPrice = '0.00006'; }
+                                else if (m.id.includes('mini') && m.id.includes('o3')) { promptPrice = '0.0000011'; compPrice = '0.0000044'; }
+                                else if (m.id.includes('mini')) { promptPrice = '0.00000015'; compPrice = '0.0000006'; }
+                            
+                                return {
+                                    id: m.id,
+                                    name: m.id,
+                                    provider: 'OpenAI',
+                                    context_length: m.id.includes('5.') || m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
+                                    supported_parameters: ['temperature', 'max_tokens'],
+                                    pricing: { prompt: promptPrice, completion: compPrice },
+                                    created: m.created || Math.floor(now/1000),
+                                    description: `OpenAI ${m.id} model`,
+                                    recommended: m.id.includes('gpt-5.4-mini') || m.id.includes('gpt-4o-mini')
+                                };
+                            });
                             
                         modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
                     } catch (error) {
                         console.error('Failed to fetch OpenAI models via API. Falling back to default list.', error);
                         modelCache.data = [{
-                            id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI',
-                            context_length: 16385, supported_parameters: ['temperature', 'max_tokens'],
+                            id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI',
+                            context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                            pricing: { prompt: '0.00000075', completion: '0.0000045' },
                             created: Math.floor(now/1000), description: 'Standard capable model', recommended: true
                         }, {
-                             id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI',
+                             id: 'gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI',
                              context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                             pricing: { prompt: '0.0000025', completion: '0.000015' },
                              created: Math.floor(now/1000), description: 'Most advanced model'
                         }];
                     }
@@ -263,14 +300,47 @@ export class AIService {
                         recommended: model.id === DEFAULT_MODEL,
                     }));
 
-                const models = fetchedModels.some((model) => model.id === DEFAULT_MODEL)
+                let availableModels = fetchedModels.some((model) => model.id === DEFAULT_MODEL)
                     ? fetchedModels
                     : [createDefaultModel(), ...fetchedModels];
 
-                modelCache.data = models;
+                // 1. Filter by Admin's Allowed Models selection (unless skipped for admin view)
+                if (settings.allowedModels && !skipFilter) {
+                    try {
+                        const allowedIds = JSON.parse(settings.allowedModels);
+                        if (Array.isArray(allowedIds) && allowedIds.length > 0) {
+                            availableModels = availableModels.filter(m => allowedIds.includes(m.id));
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse allowedModels setting', e);
+                    }
+                }
+
+                // 2. Override with Admin's Custom Pricing
+                if (settings.modelPricing) {
+                    try {
+                        const pricingMap = JSON.parse(settings.modelPricing);
+                        availableModels = availableModels.map(m => {
+                            if (pricingMap[m.id]) {
+                                return { 
+                                    ...m, 
+                                    pricing: { 
+                                        ...(m.pricing || {}), 
+                                        ...pricingMap[m.id] 
+                                    } 
+                                };
+                            }
+                            return m;
+                        });
+                    } catch (e) {
+                        console.error('Failed to parse modelPricing setting', e);
+                    }
+                }
+
+                modelCache.data = availableModels;
                 modelCache.lastFetched = Date.now();
 
-                return models;
+                return availableModels;
             } catch (error) {
                 console.error('Error fetching models:', error);
                 // Return cached data if available, even if expired

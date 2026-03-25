@@ -21,6 +21,19 @@ router.get('/settings', async (req: AdminRequest, res: Response) => {
     return res.status(500).json({ error: 'Failed to load system settings' });
   }
 });
+router.get('/models', async (req: AdminRequest, res: Response) => {
+  try {
+    const aiService = new AIService();
+    // Pass checkCache=false, skipFilter=true to get exactly what's currently returned from the providers
+    const models = await aiService.getAvailableModels(false, true);
+    return res.json({
+      success: true,
+      data: models,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load models list' });
+  }
+});
 
 router.patch(
   '/settings',
@@ -30,6 +43,8 @@ router.patch(
     body('openAiKey').optional({ nullable: true }).isString(),
     body('geminiKey').optional({ nullable: true }).isString(),
     body('anthropicKey').optional({ nullable: true }).isString(),
+    body('allowedModels').optional({ nullable: true }).isString(),
+    body('modelPricing').optional({ nullable: true }).isString(),
   ],
   async (req: AdminRequest, res: Response) => {
     try {

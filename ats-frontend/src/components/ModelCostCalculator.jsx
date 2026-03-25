@@ -35,6 +35,14 @@ const ModelCostCalculator = ({ model, isSelected = false }) => {
    * Note: Actual pricing varies, this is for UI estimation only
    */
   const estimatedCostPerMillion = useMemo(() => {
+    // Check if the server provided real pricing (or admin overridden pricing)
+    if (model?.pricing?.prompt && model?.pricing?.completion) {
+       // Estimate an average blended price per million (e.g., 80% input, 20% output)
+       const inputCost = parseFloat(model.pricing.prompt) * 1000000;
+       const outputCost = parseFloat(model.pricing.completion) * 1000000;
+       return (inputCost * 0.8) + (outputCost * 0.2);
+    }
+
     // Fallback pricing estimates (in USD per million tokens)
     const pricingEstimates = {
       'google/gemini': 0.075,
@@ -52,7 +60,7 @@ const ModelCostCalculator = ({ model, isSelected = false }) => {
       }
     }
     return pricingEstimates.default;
-  }, [model.id]);
+  }, [model.pricing, model.id]);
 
   /**
    * Estimate cost for typical resume analysis (2000 tokens)
@@ -60,10 +68,17 @@ const ModelCostCalculator = ({ model, isSelected = false }) => {
   const estimatedAnalysisCost = useMemo(() => {
     const inputTokens = 2000; // Typical resume + job description
     const outputTokens = 500; // Typical analysis output
+    
+    // If we have precise API pricing, use it directly!
+    if (model?.pricing?.prompt && model?.pricing?.completion) {
+       const cost = (inputTokens * parseFloat(model.pricing.prompt)) + (outputTokens * parseFloat(model.pricing.completion));
+       return cost.toFixed(4);
+    }
+    
     const totalTokens = inputTokens + outputTokens;
     const costInDollars = (totalTokens / 1000000) * estimatedCostPerMillion;
     return costInDollars.toFixed(4);
-  }, [estimatedCostPerMillion]);
+  }, [model.pricing, estimatedCostPerMillion]);
 
   /**
    * Determine performance tier based on model characteristics
