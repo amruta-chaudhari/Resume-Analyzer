@@ -1,6 +1,10 @@
 import mammoth from 'mammoth';
 import { FileStorageService, FileMetadata } from './file-storage.service';
 import { extractTextFromStructuredData as sharedExtractText } from '../utils/resume-text-extractor';
+import {
+  assessResumeExtractionQuality,
+  stripRtfMarkup,
+} from '../utils/resume-text-processing';
 
 export interface ProcessedResume {
   text: string;
@@ -10,6 +14,8 @@ export interface ProcessedResume {
     wordCount?: number;
     characterCount: number;
     extractedAt: Date;
+    qualityWarnings?: string[];
+    likelyScanned?: boolean;
   };
 }
 
@@ -25,6 +31,10 @@ export class ResumeFileService {
   async processResumeFile(file: Express.Multer.File, userId: string): Promise<ResumeFileData> {
     // Extract text based on file type
     const processedContent = await this.extractTextFromFile(file);
+
+    if (processedContent.metadata?.likelyScanned) {
+      throw new Error('This PDF appears to be image-based or scanned. OCR is not supported yet, so please upload a text-based PDF or DOCX file.');
+    }
 
     if (!processedContent.text || processedContent.text.trim().length < 30) {
       throw new Error('Unable to extract readable text from file');
@@ -63,8 +73,11 @@ export class ResumeFileService {
           break;
 
         case 'text/plain':
-        case 'application/rtf':
           text = buffer.toString('utf-8');
+          break;
+
+        case 'application/rtf':
+          text = stripRtfMarkup(buffer.toString('utf-8'));
           break;
 
         default:
@@ -86,17 +99,21 @@ export class ResumeFileService {
       throw new Error('Failed to extract text from file');
     }
 
-    const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
-    const characterCount = text.length;
+    const extractionQuality = assessResumeExtractionQuality(text, {
+      mimeType: file.mimetype,
+      pageCount,
+    });
 
     return {
-      text: text.trim(),
+      text: extractionQuality.normalizedText,
       structuredData,
       metadata: {
         pageCount,
-        wordCount,
-        characterCount,
-        extractedAt: new Date()
+        wordCount: extractionQuality.wordCount,
+        characterCount: extractionQuality.characterCount,
+        extractedAt: new Date(),
+        qualityWarnings: extractionQuality.qualityWarnings,
+        likelyScanned: extractionQuality.likelyScanned,
       }
     };
   }

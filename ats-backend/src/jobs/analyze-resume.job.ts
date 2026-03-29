@@ -5,6 +5,7 @@ import { FileStorageService } from '../services/file-storage.service';
 import prisma from '../lib/prisma';
 import { Logger } from '../utils/logger';
 import { AnalysisJobData, AnalysisJobResult, registerAnalysisJobProcessor } from '../queues/analysis.queue';
+import { assessResumeExtractionQuality } from '../utils/resume-text-processing';
 
 const aiService = new AIService();
 const fileStorage = new FileStorageService();
@@ -34,9 +35,15 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
 
       // Extract text from resume
       let text = resumeText;
+      let extractionWarnings: string[] = [];
       if (!text && job.data.fileBuffer && job.data.fileMimeType) {
         Logger.debug(`Job ${job.id}: Extracting text from file`);
-        text = await extractTextFromFile(job.data.fileBuffer, job.data.fileMimeType);
+        const extractionResult = await extractTextFromFile(job.data.fileBuffer, job.data.fileMimeType);
+        text = extractionResult.text;
+        extractionWarnings = extractionResult.quality.qualityWarnings;
+        if (extractionResult.quality.likelyScanned) {
+          throw new Error('This PDF appears to be image-based or scanned. OCR is not supported yet, so please upload a text-based PDF or DOCX file.');
+        }
         job.progress(25);
       }
 
@@ -60,7 +67,11 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
         jobDescription,
         selectedModel,
         modelParameters,
-        { userId, feature: 'async_resume_analysis' }
+        {
+          userId,
+          feature: 'async_resume_analysis',
+          extractionWarnings,
+        }
       );
 
       job.progress(60);
@@ -179,21 +190,34 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
 /**
  * Extract text from PDF or DOCX file
  */
-async function extractTextFromFile(buffer: Buffer, mimeType: string): Promise<string> {
+async function extractTextFromFile(
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ text: string; quality: ReturnType<typeof assessResumeExtractionQuality> }> {
   try {
+    let extractedText = '';
+    let pageCount: number | undefined;
+
     if (mimeType === 'application/pdf') {
       const { PDFParse } = await import('pdf-parse');
       const parser = new PDFParse({ data: buffer });
       const data = await parser.getText();
-      return data.text;
+      extractedText = data.text;
+      pageCount = data.pages?.length || undefined;
     } else if (
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ) {
       const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      extractedText = result.value;
     } else {
       throw new Error(`Unsupported file type: ${mimeType}`);
     }
+
+    const quality = assessResumeExtractionQuality(extractedText, { mimeType, pageCount });
+    return {
+      text: quality.normalizedText,
+      quality,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to extract text from file: ${errorMessage}`);

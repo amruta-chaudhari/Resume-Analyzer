@@ -242,7 +242,15 @@ export function buildAnalysisWhereClause(
       where.createdAt.gte = filters.fromDate;
     }
     if (filters.toDate) {
-      where.createdAt.lte = filters.toDate;
+      const isMidnightBoundary =
+        filters.toDate.getUTCHours() === 0 &&
+        filters.toDate.getUTCMinutes() === 0 &&
+        filters.toDate.getUTCSeconds() === 0 &&
+        filters.toDate.getUTCMilliseconds() === 0;
+
+      where.createdAt.lt = isMidnightBoundary
+        ? new Date(filters.toDate.getTime() + (24 * 60 * 60 * 1000))
+        : filters.toDate;
     }
   }
 
@@ -275,8 +283,35 @@ export function parseDate(dateStr?: string | number): Date | null {
   if (!dateStr) return null;
 
   try {
-    const parsed = typeof dateStr === 'string' ? new Date(dateStr) : new Date(dateStr);
-    return parsed.getTime() > 0 ? parsed : null;
+    if (typeof dateStr === 'number') {
+      const parsed = new Date(dateStr);
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+
+    const trimmed = dateStr.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      const [, yearRaw, monthRaw, dayRaw] = dateOnlyMatch;
+      const year = Number(yearRaw);
+      const month = Number(monthRaw);
+      const day = Number(dayRaw);
+      const parsed = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      return Number.isFinite(parsed.getTime()) ? parsed : null;
+    }
+
+    const isoDateTimeMatch = trimmed.match(
+      /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:?\d{2})?$/
+    );
+    if (!isoDateTimeMatch) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
   } catch {
     return null;
   }

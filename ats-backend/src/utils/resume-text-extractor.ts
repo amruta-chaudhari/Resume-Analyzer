@@ -12,12 +12,30 @@
 export function extractTextFromStructuredData(data: any): string {
   const sections: string[] = [];
 
+  const appendIfPresent = (label: string, value: unknown) => {
+    if (typeof value === 'string' && value.trim()) {
+      sections.push(`${label}: ${value.trim()}`);
+    }
+  };
+
+  const appendBulletLines = (items: unknown) => {
+    if (!Array.isArray(items)) {
+      return;
+    }
+
+    items
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .forEach((item) => sections.push(`- ${item.trim()}`));
+  };
+
   if (data.personalInfo) {
-    const { fullName, email, phone, location } = data.personalInfo;
+    const { fullName, email, phone, location, linkedin, website } = data.personalInfo;
     sections.push(`${fullName || 'Name'}`);
     if (email) sections.push(`Email: ${email}`);
     if (phone) sections.push(`Phone: ${phone}`);
     if (location) sections.push(`Location: ${location}`);
+    if (linkedin) sections.push(`LinkedIn: ${linkedin}`);
+    if (website) sections.push(`Website: ${website}`);
   }
 
   if (data.summary) {
@@ -28,8 +46,15 @@ export function extractTextFromStructuredData(data: any): string {
     sections.push('EXPERIENCE');
     data.experience.forEach((exp: any) => {
       sections.push(`${exp.title || exp.position || 'Position'} at ${exp.company || 'Company'}`);
-      sections.push(`${exp.startDate || 'Start'} - ${exp.endDate || 'Present'}`);
+      if (exp.location) {
+        sections.push(`Location: ${exp.location}`);
+      }
+      if (exp.startDate || exp.endDate || exp.current || exp.isCurrent) {
+        const endLabel = exp.current || exp.isCurrent ? 'Present' : exp.endDate;
+        sections.push([exp.startDate, endLabel].filter(Boolean).join(' - '));
+      }
       if (exp.description) sections.push(exp.description);
+      appendBulletLines(exp.achievements);
     });
   }
 
@@ -37,7 +62,9 @@ export function extractTextFromStructuredData(data: any): string {
     sections.push('EDUCATION');
     data.education.forEach((edu: any) => {
       sections.push(`${edu.degree || 'Degree'} from ${edu.institution || edu.school || 'School'}`);
+      appendIfPresent('Location', edu.location);
       if (edu.graduationDate) sections.push(`Graduated: ${edu.graduationDate}`);
+      if (edu.gpa) sections.push(`GPA: ${edu.gpa}`);
     });
   }
 
@@ -49,6 +76,9 @@ export function extractTextFromStructuredData(data: any): string {
     sections.push('CERTIFICATIONS');
     data.certifications.forEach((cert: any) => {
       sections.push(`${cert.name || 'Certification'}${cert.issuer ? ` - ${cert.issuer}` : ''}`);
+      if (cert.date || cert.expiryDate) {
+        sections.push([cert.date, cert.expiryDate ? `Expires ${cert.expiryDate}` : null].filter(Boolean).join(' - '));
+      }
     });
   }
 
@@ -57,6 +87,10 @@ export function extractTextFromStructuredData(data: any): string {
     data.projects.forEach((project: any) => {
       sections.push(`${project.name || 'Project'}`);
       if (project.description) sections.push(project.description);
+      if (Array.isArray(project.technologies) && project.technologies.length > 0) {
+        sections.push(`Technologies: ${project.technologies.join(', ')}`);
+      }
+      appendIfPresent('Project URL', project.url);
     });
   }
 

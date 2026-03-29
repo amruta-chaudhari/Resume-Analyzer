@@ -386,6 +386,12 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
     } catch (error: unknown) {
         const err = error instanceof Error ? error.message : 'Unknown error';
         Logger.error('Failed to queue analysis:', new Error(err));
+        if (/limit|budget|allowed|not enabled/i.test(err)) {
+            return res.status(403).json({ success: false, error: err });
+        }
+        if (/invalid|unsupported|scanned|upload/i.test(err)) {
+            return res.status(400).json({ success: false, error: err });
+        }
         serverError(res, 'Failed to queue analysis: ' + err);
     }
 });

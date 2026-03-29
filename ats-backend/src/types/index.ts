@@ -154,6 +154,20 @@ export interface AnalysisResult {
   experienceRelevance: ExperienceRelevance;
   actionableAdvice: string[];
   modelUsed: ModelUsed;
+  analysisWarnings?: string[];
+  analysisMethod?: string;
+  scoringBreakdown?: {
+    skills: number;
+    experience: number;
+    formatting: number;
+    weights: {
+      skills: number;
+      experience: number;
+      formatting: number;
+    };
+    keywordCoverage: number;
+    experienceKeywordCoverage: number;
+  };
   processingTime?: number;
   tokensUsed?: number;
   promptTokens?: number;
