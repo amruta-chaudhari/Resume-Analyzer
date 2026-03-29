@@ -9,6 +9,12 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
 // ========================================
 // MODELS
 // ========================================
@@ -31,6 +37,15 @@ model User {
   subscriptionTier      String    @default("free")
   subscriptionStartDate DateTime?
   subscriptionEndDate   DateTime?
+
+  // Access Control
+  role UserRole @default(USER)
+
+  // LLM Governance (custom user overrides)
+  llmMonthlyBudgetUsd Float?
+  llmMonthlyTokenLimit Int?
+  llmAllowReasoning   Boolean?
+  llmAllowedModels    String? // JSON array of model ids
 
   // Usage Tracking
   resumesCreated       Int       @default(0)
@@ -58,6 +73,7 @@ model User {
   auditLogs       AuditLog[]
 
   @@map("users")
+  @@index([role])
 }
 
 model Resume {
@@ -237,6 +253,8 @@ model Analysis {
   // Performance
   processingTimeMs Int?
   tokensUsed       Int?
+  promptTokens     Int?
+  completionTokens Int?
   estimatedCost    String?
 
   // Status
@@ -258,8 +276,9 @@ model Analysis {
 }
 
 model AiUsage {
-  id     String @id @default(uuid()) @map("_id")
+  id     String @id @default(uuid())
   userId String
+  analysisId String?
 
   // Request Info
   feature    String
@@ -268,7 +287,10 @@ model AiUsage {
 
   // Usage Metrics
   tokensUsed    Int?
+  promptTokens  Int?
+  completionTokens Int?
   estimatedCost String?
+  costUsd       Float?
 
   // Summaries
   requestSummary  String?
@@ -277,6 +299,8 @@ model AiUsage {
   // Performance
   responseTimeMs Int?
   wasCached      Boolean @default(false)
+  status         String  @default("completed")
+  details        String?
 
   // Metadata
   createdAt DateTime @default(now())
@@ -285,6 +309,8 @@ model AiUsage {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([analysisId])
   @@map("ai_usage")
 }
 
@@ -372,6 +398,7 @@ model SystemSetting {
   anthropicKey     String?
   allowedModels    String? // JSON array of strings
   modelPricing     String? // JSON object defining price per token
+  planLimits       String? // JSON object with per-plan LLM limits
 
   updatedAt DateTime @updatedAt
 

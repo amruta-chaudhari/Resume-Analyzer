@@ -5,8 +5,25 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { AuthenticationError, ConflictError, InvalidCredentialsError } from '../utils/errors';
 import { Logger } from '../utils/logger';
+import type { UserRole } from '../types';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const JWT_ISSUER = process.env.JWT_ISSUER?.trim() || undefined;
+const JWT_ACCESS_AUDIENCE = process.env.JWT_AUDIENCE?.trim() || undefined;
+const JWT_REFRESH_AUDIENCE = process.env.JWT_REFRESH_AUDIENCE?.trim() || undefined;
+const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
+
+const getAccessVerifyOptions = (): jwt.VerifyOptions => ({
+  algorithms: [JWT_ALGORITHM],
+  ...(JWT_ISSUER ? { issuer: JWT_ISSUER } : {}),
+  ...(JWT_ACCESS_AUDIENCE ? { audience: JWT_ACCESS_AUDIENCE } : {}),
+});
+
+const getRefreshVerifyOptions = (): jwt.VerifyOptions => ({
+  algorithms: [JWT_ALGORITHM],
+  ...(JWT_ISSUER ? { issuer: JWT_ISSUER } : {}),
+  ...(JWT_REFRESH_AUDIENCE ? { audience: JWT_REFRESH_AUDIENCE } : {}),
+});
 
 export class AuthService {
   private lastPruneRun = 0;
@@ -44,7 +61,7 @@ export class AuthService {
           },
         });
 
-        const accessToken = this.generateAccessToken(user.id, email);
+        const accessToken = this.generateAccessToken(user.id, email, (user as any).role || 'USER');
         const refreshSession = await this.createRefreshSession(user.id, tx);
 
         return { user, accessToken, refreshToken: refreshSession.token };
@@ -84,7 +101,7 @@ export class AuthService {
     await this.updateLastLoginAt(user.id);
 
     // Generate tokens
-    const accessToken = this.generateAccessToken(user.id, user.email);
+    const accessToken = this.generateAccessToken(user.id, user.email, (user as any).role || 'USER');
     const refreshSession = await this.createRefreshSession(user.id);
 
     return { user, accessToken, refreshToken: refreshSession.token };
@@ -128,7 +145,7 @@ export class AuthService {
     await this.pruneRefreshSessions();
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!, getRefreshVerifyOptions()) as any;
 
       if (!decoded?.userId || !decoded?.sessionId) {
         throw new AuthenticationError('Invalid refresh token');
@@ -167,7 +184,7 @@ export class AuthService {
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true, email: true, deletedAt: true },
+        select: { id: true, email: true, role: true, deletedAt: true },
       });
 
       if (!user || user.deletedAt) {
@@ -177,7 +194,7 @@ export class AuthService {
         throw new AuthenticationError('User not found');
       }
 
-      const accessToken = this.generateAccessToken(user.id, user.email);
+      const accessToken = this.generateAccessToken(user.id, user.email, (user as any).role || 'USER');
       const newSession = await this.createRefreshSession(user.id);
 
       await prisma.refreshSession.update({
@@ -257,11 +274,16 @@ export class AuthService {
     this.lastPruneRun = nowMs;
   }
 
-  private generateAccessToken(userId: string, email: string): string {
+  private generateAccessToken(userId: string, email: string, role: UserRole): string {
     return jwt.sign(
-      { userId, email },
+      { userId, email, role },
       process.env.JWT_SECRET!,
-      { expiresIn: '15m' }
+      {
+        expiresIn: '15m',
+        algorithm: JWT_ALGORITHM,
+        ...(JWT_ISSUER ? { issuer: JWT_ISSUER } : {}),
+        ...(JWT_ACCESS_AUDIENCE ? { audience: JWT_ACCESS_AUDIENCE } : {}),
+      }
     );
   }
 
@@ -269,7 +291,12 @@ export class AuthService {
     return jwt.sign(
       { userId, sessionId },
       process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: '7d' }
+      {
+        expiresIn: '7d',
+        algorithm: JWT_ALGORITHM,
+        ...(JWT_ISSUER ? { issuer: JWT_ISSUER } : {}),
+        ...(JWT_REFRESH_AUDIENCE ? { audience: JWT_REFRESH_AUDIENCE } : {}),
+      }
     );
   }
 
@@ -298,6 +325,6 @@ export class AuthService {
   }
 
   verifyAccessToken(token: string) {
-    return jwt.verify(token, process.env.JWT_SECRET!);
+    return jwt.verify(token, process.env.JWT_SECRET!, getAccessVerifyOptions());
   }
 }
