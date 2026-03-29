@@ -561,7 +561,7 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     const analysisResult = await aiService.analyzeResume(
       resumeText,
       normalizedJobDescription.trim(),
-      executionPlan.modelId,
+      selectedModel || undefined,
       modelParameters,
       { userId: req.userId!, feature: 'stored_resume_analysis', resumeVisualInput }
     );

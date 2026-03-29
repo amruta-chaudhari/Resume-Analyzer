@@ -399,7 +399,7 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             fileBuffer: req.file.buffer,
             fileName: req.file.originalname,
             fileMimeType: req.file.mimetype,
-            selectedModel: executionPlan.modelId,
+            selectedModel: modelIdentifier || undefined,
             temperature,
             max_completion_tokens: maxTokens,
             max_tokens: maxTokens,
