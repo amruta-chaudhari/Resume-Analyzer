@@ -392,6 +392,25 @@ describe('AIService', () => {
       expect(result.modelUsed).toBeDefined();
       expect(result.modelUsed.id).toBe(model);
     });
+
+    it('should fall back to an executable configured model when selected model is unavailable', async () => {
+      const resume = MockDataFactory.generateResumeText();
+      const jobDescription = MockDataFactory.generateJobDescription();
+      const analysisResult = MockDataFactory.generateAnalysisResult();
+
+      mockChatCompletionsCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: JSON.stringify(analysisResult) } }],
+      });
+
+      const result = await aiService.analyzeResume(
+        resume,
+        jobDescription,
+        'gpt-5.4-mini'
+      );
+
+      expect(result.modelUsed.id).toBe('openrouter/free');
+      expect(result.analysisMethod).toBe('hybrid_deterministic_v2');
+    });
   });
 
    describe('checkHealth', () => {

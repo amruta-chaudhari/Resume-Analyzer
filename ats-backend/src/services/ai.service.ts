@@ -450,12 +450,28 @@ export class AIService {
             candidates = candidates.filter((model) => policy!.allowedModels!.includes(model.id));
         }
 
+        const policyFilteredCandidates = [...candidates];
         if (selectedModelId) {
-            candidates = candidates.filter((model) => model.id === selectedModelId);
+            if (globallyAllowedModels.length > 0 && !globallyAllowedModels.includes(selectedModelId)) {
+                throw new Error('Selected model is not allowed by admin policy');
+            }
+
+            if (policy?.allowedModels && policy.allowedModels.length > 0 && !policy.allowedModels.includes(selectedModelId)) {
+                throw new Error('Selected model is not available for your plan');
+            }
+
+            const selectedCandidates = candidates.filter((model) => model.id === selectedModelId);
+            if (selectedCandidates.length > 0) {
+                candidates = selectedCandidates;
+            }
         }
 
         if (candidates.length === 0) {
+            if (selectedModelId && policyFilteredCandidates.length > 0) {
+                candidates = policyFilteredCandidates;
+            } else {
             throw new Error('No AI models are available for the current provider and policy configuration');
+            }
         }
 
         const enrichedCandidates = candidates.map((model) => {
@@ -481,6 +497,9 @@ export class AIService {
         });
 
         let selectedCandidate = enrichedCandidates[0];
+        let routingReason = selectedModelId
+            ? (selectedCandidate.model.id === selectedModelId ? 'selected_model' : 'selected_model_fallback')
+            : 'lowest_cost_within_policy';
 
         if (!selectedModelId && usageSummary && policy) {
             const fittingCandidate = enrichedCandidates.find((candidate) => {
@@ -498,6 +517,7 @@ export class AIService {
 
             if (fittingCandidate) {
                 selectedCandidate = fittingCandidate;
+                routingReason = 'lowest_cost_within_policy';
             }
         }
 
@@ -526,6 +546,7 @@ export class AIService {
             usageSummary,
             policy,
             availableProviders: effectiveProviders,
+            routingReason,
         };
     }
 
@@ -1023,7 +1044,7 @@ ${jobDescription}
             finalModel = executionPlan.modelId;
             estimatedCostUsd = executionPlan.estimatedCostUsd;
             keySource = executionPlan.keySource;
-            routingReason = selectedModel ? 'selected_model' : 'lowest_cost_within_policy';
+            routingReason = executionPlan.routingReason;
             let responseText = '';
 
             if (provider === 'anthropic') {
