@@ -107,202 +107,210 @@ export class AIService {
 
         return { detectedIssues, formattingHints };
     }
-    async getAvailableModels(checkCache: boolean = true, skipFilter: boolean = false): Promise<AIModel[]> {
+    async getAvailableModels(checkCache: boolean = true, skipFilter: boolean = false, providerOverride?: string): Promise<AIModel[]> {
         const now = Date.now();
-        if (checkCache && !skipFilter && modelCache.data.length > 0 && modelCache.lastFetched && (now - modelCache.lastFetched < CACHE_DURATION)) {
+        if (checkCache && !skipFilter && !providerOverride && modelCache.data.length > 0 && modelCache.lastFetched && (now - modelCache.lastFetched < CACHE_DURATION)) {
             return modelCache.data;
         }
 
-        // Prevent multiple simultaneous requests
-        if (modelFetchPromise) {
+        // Prevent multiple simultaneous requests unless overriding
+        if (modelFetchPromise && !providerOverride) {
             return modelFetchPromise;
         }
 
         modelCache.isLoading = true;
 
-        modelFetchPromise = (async () => {
+        const fetchLogic = (async () => {
             try {
                 const settings = await systemSettingsService.getSettings();
-                const provider = settings.activeAiProvider || 'openrouter';
+                const provider = providerOverride || settings.activeAiProvider || 'openrouter';
 
-                if (provider === 'anthropic') {
+                let allFetchedModels: AIModel[] = [];
+
+                if (provider === 'anthropic' || provider === 'multiple') {
                     const apiKey = settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '';
-                    if (!apiKey) throw new Error('Anthropic API key not configured');
-                    
-                    try {
-                        const response = await axios.get('https://api.anthropic.com/v1/models', {
-                            headers: {
-                                'x-api-key': apiKey,
-                                'anthropic-version': '2023-06-01'
-                            }
-                        });
-                        
-                        const fetchedModels: AIModel[] = response.data.data.map((m: any) => ({
-                            id: m.id,
-                            name: m.display_name || m.id,
-                            provider: 'Anthropic',
-                            context_length: m.id.includes('4.') || m.id.includes('3.5') ? 200000 : 200000,
-                            supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { 
-                                prompt: m.id.includes('opus') ? '0.000015' : m.id.includes('haiku') ? '0.0000008' : '0.000003',
-                                completion: m.id.includes('opus') ? '0.000075' : m.id.includes('haiku') ? '0.000004' : '0.000015'
-                            },
-                            created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : Math.floor(now/1000),
-                            description: `Anthropic ${m.id} model`,
-                            recommended: m.id.includes('haiku')
-                        }));
-                        
-                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
-                    } catch (error) {
-                        console.error('Failed to fetch Anthropic models via API. Falling back to default list.', error);
-                        // Fallback list
-                        modelCache.data = [{
-                            id: 'claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'Anthropic',
-                            context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { prompt: '0.0000008', completion: '0.000004' },
-                            created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true
-                        }, {
-                            id: 'claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'Anthropic',
-                            context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { prompt: '0.000003', completion: '0.000015' },
-                            created: Math.floor(now/1000), description: 'Most intelligent model'
-                        }];
-                    }
-                    
-                    modelCache.lastFetched = Date.now();
-                    return modelCache.data;
-                } else if (provider === 'gemini') {
-                    const apiKey = settings.geminiKey || process.env.GEMINI_API_KEY || '';
-                    if (!apiKey) throw new Error('Gemini API key not configured');
-                    
-                    try {
-                        const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-                        const fetchedModels: AIModel[] = response.data.models
-                            .filter((m: any) => m.name.includes('gemini') && !m.name.includes('embedding'))
-                            .map((m: any) => ({
-                                id: m.name.replace('models/', ''),
-                                name: m.displayName || m.name.replace('models/', ''),
-                                provider: 'Google',
-                                context_length: m.inputTokenLimit || (m.name.includes('pro') ? 2097152 : 1048576),
-                                supported_parameters: ['temperature', 'max_tokens'],
-                                pricing: {
-                                    prompt: m.name.includes('lite') ? '0.00000005' : m.name.includes('flash') ? '0.000000075' : m.name.includes('pro') ? '0.00000125' : '0.000000075',
-                                    completion: m.name.includes('lite') ? '0.0000002' : m.name.includes('flash') ? '0.0000003' : m.name.includes('pro') ? '0.000005' : '0.0000003'
-                                },
-                                created: Math.floor(now/1000),
-                                description: m.description || 'Google Gemini Model',
-                                recommended: m.name.includes('flash')
-                            }));
-                            
-                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
-                    } catch (error) {
-                        console.error('Failed to fetch Gemini models via API. Falling back to default list.', error);
-                        modelCache.data = [{
-                            id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google',
-                            context_length: 1048576, supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { prompt: '0.000000075', completion: '0.0000003' },
-                            created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true
-                        }, {
-                            id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google',
-                            context_length: 2097152, supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { prompt: '0.00000125', completion: '0.000005' },
-                            created: Math.floor(now/1000), description: 'Most capable model'
-                        }];
-                    }
-                    
-                    modelCache.lastFetched = Date.now();
-                    return modelCache.data;
-                } else if (provider === 'openai') {
-                    const apiKey = settings.openAiKey || process.env.OPENAI_API_KEY || '';
-                    if (!apiKey) throw new Error('OpenAI API key not configured');
-                    
-                    try {
-                        const openai = new OpenAI({ apiKey });
-                        const response = await openai.models.list();
-                        
-                        const fetchedModels: AIModel[] = response.data
-                            .filter((m: any) => {
-                                if (!m.id.includes('gpt') && !m.id.includes('o1') && !m.id.includes('o3')) return false;
-                                
-                                // Filter out historical implicitly-dated snapshots (like -0613, -1106, -2024-05-13)
-                                const isDated = /-\d{4}/.test(m.id);
-                                const isSpecificOrBeta = m.id.includes('vision') || m.id.includes('instruct') || m.id.includes('realtime') || m.id.includes('audio');
-                                
-                                return !isDated && !isSpecificOrBeta;
-                            })
-                            .map((m: any) => {
-                                let promptPrice = '0.0000025';
-                                let compPrice = '0.000010';
-                                
-                                // March 2026 Pricing
-                                if (m.id.includes('5.2-pro')) { promptPrice = '0.000021'; compPrice = '0.000168'; }
-                                else if (m.id.includes('5.4') && m.id.includes('mini')) { promptPrice = '0.00000075'; compPrice = '0.0000045'; }
-                                else if (m.id.includes('5.4') && m.id.includes('nano')) { promptPrice = '0.0000002'; compPrice = '0.00000125'; }
-                                else if (m.id.includes('5.4')) { promptPrice = '0.0000025'; compPrice = '0.000015'; }
-                                else if (m.id.includes('5.2')) { promptPrice = '0.00000175'; compPrice = '0.000014'; }
-                                else if (m.id.includes('gpt-5') && m.id.includes('mini')) { promptPrice = '0.00000025'; compPrice = '0.000002'; }
-                                else if (m.id.includes('gpt-5') && m.id.includes('nano')) { promptPrice = '0.00000005'; compPrice = '0.0000004'; }
-                                else if (m.id.includes('gpt-5')) { promptPrice = '0.00000125'; compPrice = '0.000010'; }
-                                else if (m.id.includes('o1')) { promptPrice = '0.000015'; compPrice = '0.00006'; }
-                                else if (m.id.includes('mini') && m.id.includes('o3')) { promptPrice = '0.0000011'; compPrice = '0.0000044'; }
-                                else if (m.id.includes('mini')) { promptPrice = '0.00000015'; compPrice = '0.0000006'; }
-                            
-                                return {
-                                    id: m.id,
-                                    name: m.id,
-                                    provider: 'OpenAI',
-                                    context_length: m.id.includes('5.') || m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
-                                    supported_parameters: ['temperature', 'max_tokens'],
-                                    pricing: { prompt: promptPrice, completion: compPrice },
-                                    created: m.created || Math.floor(now/1000),
-                                    description: `OpenAI ${m.id} model`,
-                                    recommended: m.id.includes('gpt-5.4-mini') || m.id.includes('gpt-4o-mini')
-                                };
+                    if (apiKey) {
+                        try {
+                            const response = await axios.get('https://api.anthropic.com/v1/models', {
+                                headers: {
+                                    'x-api-key': apiKey,
+                                    'anthropic-version': '2023-06-01'
+                                }
                             });
                             
-                        modelCache.data = fetchedModels.length > 0 ? fetchedModels : [];
-                    } catch (error) {
-                        console.error('Failed to fetch OpenAI models via API. Falling back to default list.', error);
-                        modelCache.data = [{
-                            id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI',
-                            context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
-                            pricing: { prompt: '0.00000075', completion: '0.0000045' },
-                            created: Math.floor(now/1000), description: 'Standard capable model', recommended: true
-                        }, {
-                             id: 'gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI',
-                             context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
-                             pricing: { prompt: '0.0000025', completion: '0.000015' },
-                             created: Math.floor(now/1000), description: 'Most advanced model'
-                        }];
+                            const fetchedModels: AIModel[] = response.data.data.map((m: any) => ({
+                                id: m.id,
+                                name: m.display_name || m.id,
+                                provider: 'Anthropic',
+                                context_length: m.id.includes('4.') || m.id.includes('3.5') ? 200000 : 200000,
+                                supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { 
+                                    prompt: m.id.includes('opus') ? '0.000015' : m.id.includes('haiku') ? '0.0000008' : '0.000003',
+                                    completion: m.id.includes('opus') ? '0.000075' : m.id.includes('haiku') ? '0.000004' : '0.000015'
+                                },
+                                created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : Math.floor(now/1000),
+                                description: `Anthropic ${m.id} model`,
+                                recommended: m.id.includes('haiku')
+                            }));
+                            
+                            allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : []));
+                        } catch (error) {
+                            console.error('Failed to fetch Anthropic models via API. Falling back to default list.', error);
+                            // Fallback list
+                            allFetchedModels.push({
+                                id: 'claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'Anthropic',
+                                context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { prompt: '0.0000008', completion: '0.000004' },
+                                created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true
+                            }, {
+                                id: 'claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'Anthropic',
+                                context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { prompt: '0.000003', completion: '0.000015' },
+                                created: Math.floor(now/1000), description: 'Most intelligent model'
+                            });
+                        }
+                    } else if (provider === 'anthropic') {
+                        throw new Error('Anthropic API key not configured');
                     }
-                    
-                    modelCache.lastFetched = Date.now();
-                    return modelCache.data;
+                }
+                
+                if (provider === 'gemini' || provider === 'multiple') {
+                    const apiKey = settings.geminiKey || process.env.GEMINI_API_KEY || '';
+                    if (apiKey) {
+                        try {
+                            const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                            const fetchedModels: AIModel[] = response.data.models
+                                .filter((m: any) => m.name.includes('gemini') && !m.name.includes('embedding'))
+                                .map((m: any) => ({
+                                    id: m.name.replace('models/', ''),
+                                    name: m.displayName || m.name.replace('models/', ''),
+                                    provider: 'Google',
+                                    context_length: m.inputTokenLimit || (m.name.includes('pro') ? 2097152 : 1048576),
+                                    supported_parameters: ['temperature', 'max_tokens'],
+                                    pricing: {
+                                        prompt: m.name.includes('lite') ? '0.00000005' : m.name.includes('flash') ? '0.000000075' : m.name.includes('pro') ? '0.00000125' : '0.000000075',
+                                        completion: m.name.includes('lite') ? '0.0000002' : m.name.includes('flash') ? '0.0000003' : m.name.includes('pro') ? '0.000005' : '0.0000003'
+                                    },
+                                    created: Math.floor(now/1000),
+                                    description: m.description || 'Google Gemini Model',
+                                    recommended: m.name.includes('flash')
+                                }));
+                                
+                            allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : []));
+                        } catch (error) {
+                            console.error('Failed to fetch Gemini models via API. Falling back to default list.', error);
+                            allFetchedModels.push({
+                                id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google',
+                                context_length: 1048576, supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { prompt: '0.000000075', completion: '0.0000003' },
+                                created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true
+                            }, {
+                                id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google',
+                                context_length: 2097152, supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { prompt: '0.00000125', completion: '0.000005' },
+                                created: Math.floor(now/1000), description: 'Most capable model'
+                            });
+                        }
+                    } else if (provider === 'gemini') {
+                        throw new Error('Gemini API key not configured');
+                    }
+                }
+                
+                if (provider === 'openai' || provider === 'multiple') {
+                    const apiKey = settings.openAiKey || process.env.OPENAI_API_KEY || '';
+                    if (apiKey) {
+                        try {
+                            const openai = new OpenAI({ apiKey });
+                            const response = await openai.models.list();
+                            
+                            const fetchedModels: AIModel[] = response.data
+                                .filter((m: any) => {
+                                    if (!m.id.includes('gpt') && !m.id.includes('o1') && !m.id.includes('o3')) return false;
+                                    
+                                    const isDated = /-\d{4}/.test(m.id);
+                                    const isSpecificOrBeta = m.id.includes('vision') || m.id.includes('instruct') || m.id.includes('realtime') || m.id.includes('audio');
+                                    
+                                    return !isDated && !isSpecificOrBeta;
+                                })
+                                .map((m: any) => {
+                                    let promptPrice = '0.0000025';
+                                    let compPrice = '0.000010';
+                                    
+                                    if (m.id.includes('5.2-pro')) { promptPrice = '0.000021'; compPrice = '0.000168'; }
+                                    else if (m.id.includes('5.4') && m.id.includes('mini')) { promptPrice = '0.00000075'; compPrice = '0.0000045'; }
+                                    else if (m.id.includes('5.4') && m.id.includes('nano')) { promptPrice = '0.0000002'; compPrice = '0.00000125'; }
+                                    else if (m.id.includes('5.4')) { promptPrice = '0.0000025'; compPrice = '0.000015'; }
+                                    else if (m.id.includes('5.2')) { promptPrice = '0.00000175'; compPrice = '0.000014'; }
+                                    else if (m.id.includes('gpt-5') && m.id.includes('mini')) { promptPrice = '0.00000025'; compPrice = '0.000002'; }
+                                    else if (m.id.includes('gpt-5') && m.id.includes('nano')) { promptPrice = '0.00000005'; compPrice = '0.0000004'; }
+                                    else if (m.id.includes('gpt-5')) { promptPrice = '0.00000125'; compPrice = '0.000010'; }
+                                    else if (m.id.includes('o1')) { promptPrice = '0.000015'; compPrice = '0.00006'; }
+                                    else if (m.id.includes('mini') && m.id.includes('o3')) { promptPrice = '0.0000011'; compPrice = '0.0000044'; }
+                                    else if (m.id.includes('mini')) { promptPrice = '0.00000015'; compPrice = '0.0000006'; }
+                                
+                                    return {
+                                        id: m.id,
+                                        name: m.id,
+                                        provider: 'OpenAI',
+                                        context_length: m.id.includes('5.') || m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
+                                        supported_parameters: ['temperature', 'max_tokens'],
+                                        pricing: { prompt: promptPrice, completion: compPrice },
+                                        created: m.created || Math.floor(now/1000),
+                                        description: `OpenAI ${m.id} model`,
+                                        recommended: m.id.includes('gpt-5.4-mini') || m.id.includes('gpt-4o-mini')
+                                    };
+                                });
+                                
+                            allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : []));
+                        } catch (error) {
+                            console.error('Failed to fetch OpenAI models via API.', error);
+                            allFetchedModels.push({
+                                id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI',
+                                context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                                pricing: { prompt: '0.00000075', completion: '0.0000045' },
+                                created: Math.floor(now/1000), description: 'Standard capable model', recommended: true
+                            }, {
+                                 id: 'gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI',
+                                 context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                                 pricing: { prompt: '0.0000025', completion: '0.000015' },
+                                 created: Math.floor(now/1000), description: 'Most advanced model'
+                            });
+                        }
+                    } else if (provider === 'openai') {
+                        throw new Error('OpenAI API key not configured');
+                    }
                 }
 
-                // Default OpenRouter behavior
-                const response = await axios.get('https://openrouter.ai/api/v1/models');
+                if (provider === 'openrouter') {
+                    try {
+                        const response = await axios.get('https://openrouter.ai/api/v1/models');
+                        const fetchedModels: AIModel[] = response.data.data
+                            .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
+                            .map((model: AIModel) => ({
+                                id: model.id,
+                                name: model.name || model.id,
+                                provider: model.id.split('/')[0],
+                                context_length: model.context_length || 4096,
+                                supported_parameters: model.supported_parameters || [],
+                                per_request_limits: model.per_request_limits,
+                                pricing: model.pricing,
+                                created: model.created,
+                                description: model.description || '',
+                                architecture: model.architecture,
+                                recommended: model.id === DEFAULT_MODEL,
+                            }));
 
-                // Filter and format models
-                const fetchedModels: AIModel[] = response.data.data
-                    .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
-                    .map((model: AIModel) => ({
-                        id: model.id,
-                        name: model.name || model.id,
-                        provider: model.id.split('/')[0],
-                        context_length: model.context_length || 4096,
-                        supported_parameters: model.supported_parameters || [],
-                        per_request_limits: model.per_request_limits,
-                        pricing: model.pricing,
-                        created: model.created,
-                        description: model.description || '',
-                        architecture: model.architecture,
-                        recommended: model.id === DEFAULT_MODEL,
-                    }));
+                        allFetchedModels.push(...fetchedModels);
+                    } catch (error) {
+                        console.error('Failed to fetch OpenRouter models. Relying on defaults.');
+                    }
+                }
+                
+                let availableModels = allFetchedModels;
 
-                let availableModels = fetchedModels.some((model) => model.id === DEFAULT_MODEL)
-                    ? fetchedModels
-                    : [createDefaultModel(), ...fetchedModels];
+                if (provider === 'openrouter' && !availableModels.some((model) => model.id === DEFAULT_MODEL)) {
+                    availableModels = [createDefaultModel(), ...availableModels];
+                }
 
                 // 1. Filter by Admin's Allowed Models selection (unless skipped for admin view)
                 if (settings.allowedModels && !skipFilter) {
@@ -336,25 +344,34 @@ export class AIService {
                         console.error('Failed to parse modelPricing setting', e);
                     }
                 }
-
-                modelCache.data = availableModels;
-                modelCache.lastFetched = Date.now();
+                
+                if (!providerOverride) {
+                    modelCache.data = availableModels;
+                    modelCache.lastFetched = Date.now();
+                }
 
                 return availableModels;
             } catch (error) {
                 console.error('Error fetching models:', error);
                 // Return cached data if available, even if expired
-                if (modelCache.data.length > 0) {
+                if (!providerOverride && modelCache.data.length > 0) {
                     return modelCache.data;
                 }
                 throw error;
             } finally {
-                modelCache.isLoading = false;
-                modelFetchPromise = null;
+                if (!providerOverride) {
+                    modelCache.isLoading = false;
+                    modelFetchPromise = null;
+                }
             }
         })();
 
-        return modelFetchPromise;
+        if (!providerOverride) {
+            modelFetchPromise = fetchLogic;
+            return modelFetchPromise;
+        }
+        
+        return fetchLogic;
     }
 
     async refreshModelsCache(): Promise<AIModel[]> {

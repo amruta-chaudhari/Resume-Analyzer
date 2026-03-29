@@ -49,8 +49,22 @@ const SystemSettingsPanel = () => {
     fetchSettings();
   }, []);
 
-  const handleChange = (field, value) => {
+  const [modelsLoading, setModelsLoading] = useState(false);
+
+  const handleChange = async (field, value) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
+    
+    if (field === 'activeAiProvider') {
+      setModelsLoading(true);
+      try {
+        const newModels = await adminService.getModels(value);
+        setModelsData(newModels || []);
+      } catch (err) {
+        console.warn('Failed to fetch models for provider:', value);
+      } finally {
+        setModelsLoading(false);
+      }
+    }
   };
 
   const handleSave = async (e) => {
@@ -115,10 +129,11 @@ const SystemSettingsPanel = () => {
             onChange={(e) => handleChange('activeAiProvider', e.target.value)}
             className="mt-2 w-full rounded-2xl border border-white/20 bg-white/70 px-4 py-3 text-gray-900 outline-none transition focus:border-cyan-400 dark:bg-slate-900/60 dark:text-white"
           >
-            <option value="openrouter">OpenRouter (Recommended, supports multiple models)</option>
-            <option value="openai">OpenAI (ChatGPT, GPT-4)</option>
-            <option value="gemini">Google AI Studio (Gemini 1.5)</option>
-            <option value="anthropic">Anthropic (Claude 3)</option>
+            <option value="openrouter">OpenRouter (Recommended, supports multiple APIs natively)</option>
+            <option value="openai">OpenAI (Direct API)</option>
+            <option value="gemini">Google AI Studio (Gemini Direct API)</option>
+            <option value="anthropic">Anthropic (Claude Direct API)</option>
+            <option value="multiple">Combine Direct APIs (OpenAI + Gemini + Anthropic)</option>
           </select>
         </label>
 

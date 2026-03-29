@@ -24,8 +24,10 @@ router.get('/settings', async (req: AdminRequest, res: Response) => {
 router.get('/models', async (req: AdminRequest, res: Response) => {
   try {
     const aiService = new AIService();
+    const providerOverride = req.query.provider as string | undefined;
+    
     // Pass checkCache=false, skipFilter=true to get exactly what's currently returned from the providers
-    const models = await aiService.getAvailableModels(false, true);
+    const models = await aiService.getAvailableModels(false, true, providerOverride);
     return res.json({
       success: true,
       data: models,

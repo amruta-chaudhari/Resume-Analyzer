@@ -38,8 +38,9 @@ export const adminService = {
     return response.data.data;
   },
 
-  async getModels() {
-    const response = await apiClient.get('/api/admin/models');
+  async getModels(providerOverride) {
+    const params = providerOverride ? { provider: providerOverride } : {};
+    const response = await apiClient.get('/api/admin/models', { params });
     return response.data.data;
   },
 };

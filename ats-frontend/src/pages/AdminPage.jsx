@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import { adminService } from '../services/adminService';
 import SystemSettingsPanel from '../components/admin/SystemSettingsPanel';
+import useTheme from '../hooks/useTheme';
 
 const formatDateTime = (value) => {
   if (!value) {
@@ -57,6 +58,7 @@ const getVisiblePageNumbers = (currentPage, totalPages) => {
 };
 
 const AdminPage = () => {
+  useTheme(); // Initialize theme so refresh retains visual state
   const currentUser = useAuthStore((state) => state.user);
   const updateCurrentUser = useAuthStore((state) => state.updateUser);
 

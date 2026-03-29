@@ -63,11 +63,11 @@ const ModelCostCalculator = ({ model, isSelected = false }) => {
   }, [model.pricing, model.id]);
 
   /**
-   * Estimate cost for typical resume analysis (2000 tokens)
+   * Estimate cost for typical resume analysis (2500 input, 2500 output tokens)
    */
   const estimatedAnalysisCost = useMemo(() => {
-    const inputTokens = 2000; // Typical resume + job description
-    const outputTokens = 500; // Typical analysis output
+    const inputTokens = 2500; // Typical resume + job description parsing
+    const outputTokens = 2500; // Typical detailed full analysis output
     
     // If we have precise API pricing, use it directly!
     if (model?.pricing?.prompt && model?.pricing?.completion) {
@@ -75,6 +75,7 @@ const ModelCostCalculator = ({ model, isSelected = false }) => {
        return cost.toFixed(4);
     }
     
+    // Average blended fallback if precise pricing is missing
     const totalTokens = inputTokens + outputTokens;
     const costInDollars = (totalTokens / 1000000) * estimatedCostPerMillion;
     return costInDollars.toFixed(4);
