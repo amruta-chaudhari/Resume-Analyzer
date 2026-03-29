@@ -406,7 +406,21 @@ ${jobDescription}
                             });
                         }
                     } else if (provider.includes('anthropic') && !provider.includes(',')) {
-                        throw new Error('Anthropic API key not configured');
+                        allFetchedModels.push({
+                            id: 'claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'Anthropic',
+                            context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                            supportsVision: true,
+                            pricing: { prompt: '0.0000008', completion: '0.000004' },
+                            created: Math.floor(now/1000), description: 'Fast and cost-effective fallback catalog entry', recommended: true,
+                            architecture: { modality: 'text+image' }
+                        }, {
+                            id: 'claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'Anthropic',
+                            context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                            supportsVision: true,
+                            pricing: { prompt: '0.000003', completion: '0.000015' },
+                            created: Math.floor(now/1000), description: 'Most intelligent fallback catalog entry',
+                            architecture: { modality: 'text+image' }
+                        });
                     }
                 }
                 
@@ -454,7 +468,21 @@ ${jobDescription}
                             });
                         }
                     } else if (provider.includes('gemini') && !provider.includes(',')) {
-                        throw new Error('Gemini API key not configured');
+                        allFetchedModels.push({
+                            id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google',
+                            context_length: 1048576, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                            supportsVision: true,
+                            pricing: { prompt: '0.000000075', completion: '0.0000003' },
+                            created: Math.floor(now/1000), description: 'Fast and versatile fallback catalog entry', recommended: true,
+                            architecture: { modality: 'text+image' }
+                        }, {
+                            id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google',
+                            context_length: 2097152, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                            supportsVision: true,
+                            pricing: { prompt: '0.00000125', completion: '0.000005' },
+                            created: Math.floor(now/1000), description: 'Most capable fallback catalog entry',
+                            architecture: { modality: 'text+image' }
+                        });
                     }
                 }
                 
@@ -525,7 +553,28 @@ ${jobDescription}
                             });
                         }
                     } else if (provider.includes('openai') && !provider.includes(',')) {
-                        throw new Error('OpenAI API key not configured');
+                        allFetchedModels.push({
+                            id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI',
+                            context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                            supportsVision: true,
+                            pricing: { prompt: '0.00000075', completion: '0.0000045' },
+                            created: Math.floor(now/1000), description: 'Standard capable fallback catalog entry', recommended: true,
+                            architecture: { modality: 'text+image' }
+                        }, {
+                             id: 'gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI',
+                             context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                             supportsVision: true,
+                             pricing: { prompt: '0.0000025', completion: '0.000015' },
+                             created: Math.floor(now/1000), description: 'Most advanced fallback catalog entry',
+                             architecture: { modality: 'text+image' }
+                        }, {
+                             id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI',
+                             context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                             supportsVision: true,
+                             pricing: { prompt: '0.00000015', completion: '0.0000006' },
+                             created: Math.floor(now/1000), description: 'Fast multimodal fallback catalog entry',
+                             architecture: { modality: 'text+image' }
+                        });
                     }
                 }
 
