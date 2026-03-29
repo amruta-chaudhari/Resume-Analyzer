@@ -16,6 +16,7 @@ import type {
 } from '../types/index';
 import { buildDeterministicAtsScorecard } from '../utils/ats-analysis';
 import { assessResumeExtractionQuality, normalizeResumeText } from '../utils/resume-text-processing';
+import type { ResumeVisualInput } from '../utils/resume-visual-input';
 
 const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
 
@@ -124,18 +125,97 @@ const analysisDraftSchema = z.object({
     }).optional(),
 }).passthrough();
 
+const inferVisionCapability = (modelId: string, provider: string, modality?: string | null): boolean => {
+    const normalizedId = (modelId || '').toLowerCase();
+    const normalizedProvider = (provider || '').toLowerCase();
+    const normalizedModality = (modality || '').toLowerCase();
+
+    if (normalizedModality.includes('image')) {
+        return true;
+    }
+
+    if (normalizedProvider.includes('google') || normalizedProvider.includes('gemini')) {
+        return normalizedId.includes('gemini');
+    }
+
+    if (normalizedProvider.includes('anthropic')) {
+        return normalizedId.includes('claude');
+    }
+
+    if (normalizedProvider.includes('openai')) {
+        return /gpt-(4o|4\.1|4\.5|5|5\.2|5\.4)|o1|o3/.test(normalizedId);
+    }
+
+    return /vision|vl|multimodal|image|4o|claude|gemini/.test(normalizedId);
+};
+
 const createDefaultModel = (): AIModel => ({
     id: DEFAULT_MODEL,
     name: 'GPT-5.4 Mini',
     provider: 'OpenAI',
     context_length: 128000,
-    supported_parameters: ['temperature', 'max_tokens'],
+    supportsVision: true,
+    supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
     created: Math.floor(Date.now() / 1000),
     description: 'Fast, affordable, modern model defaulting for ATS requests.',
     recommended: true,
+    architecture: {
+        modality: 'text+image',
+    },
 });
 
 export class AIService {
+    private getErrorMessage(error: unknown): string {
+        if (!error || typeof error !== 'object') {
+            return '';
+        }
+
+        const candidate = error as {
+            message?: string;
+            error?: { message?: string };
+            response?: { data?: { error?: { message?: string }; message?: string } };
+        };
+
+        return (
+            candidate.error?.message ||
+            candidate.response?.data?.error?.message ||
+            candidate.response?.data?.message ||
+            candidate.message ||
+            ''
+        );
+    }
+
+    private isUnsupportedParameterError(error: unknown, parameter: 'max_tokens' | 'max_completion_tokens'): boolean {
+        const message = this.getErrorMessage(error).toLowerCase();
+        if (!message) {
+            return false;
+        }
+
+        return message.includes('unsupported parameter') && message.includes(parameter);
+    }
+
+    private async createChatCompletionWithTokenFallback(
+        client: OpenAI,
+        params: Record<string, unknown>,
+        maxTokens: number
+    ): Promise<any> {
+        try {
+            return await client.chat.completions.create({
+                ...params,
+                max_completion_tokens: maxTokens,
+            } as any);
+        } catch (error) {
+            if (!this.isUnsupportedParameterError(error, 'max_completion_tokens')) {
+                throw error;
+            }
+
+            return await client.chat.completions.create({
+                ...params,
+                max_tokens: maxTokens,
+            } as any);
+        }
+    }
+
     private uniqueStrings(values: Array<string | null | undefined>, limit: number = 8): string[] {
         return Array.from(new Set(values.map((value) => (value || '').trim()).filter(Boolean))).slice(0, limit);
     }
@@ -166,6 +246,40 @@ export class AIService {
             'Do not fabricate metrics or achievements.',
             'Return valid JSON only.',
         ].join(' ');
+    }
+
+    private buildOpenAIUserContent(userPrompt: string, visualInput?: ResumeVisualInput | null) {
+        if (!visualInput) {
+            return userPrompt;
+        }
+
+        return [
+            { type: 'text', text: userPrompt },
+            {
+                type: 'image_url',
+                image_url: {
+                    url: `data:${visualInput.mimeType};base64,${visualInput.base64}`,
+                },
+            },
+        ];
+    }
+
+    private buildAnthropicUserContent(userPrompt: string, visualInput?: ResumeVisualInput | null) {
+        if (!visualInput) {
+            return userPrompt;
+        }
+
+        return [
+            { type: 'text', text: userPrompt },
+            {
+                type: 'image',
+                source: {
+                    type: 'base64',
+                    media_type: visualInput.mimeType,
+                    data: visualInput.base64,
+                },
+            },
+        ];
     }
 
     private buildUserPrompt(params: {
@@ -259,14 +373,16 @@ ${jobDescription}
                                 name: m.display_name || m.id,
                                 provider: 'Anthropic',
                                 context_length: m.id.includes('4.') || m.id.includes('3.5') ? 200000 : 200000,
-                                supported_parameters: ['temperature', 'max_tokens'],
+                                supportsVision: inferVisionCapability(m.id, 'Anthropic', 'text+image'),
+                                supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
                                 pricing: { 
                                     prompt: m.id.includes('opus') ? '0.000015' : m.id.includes('haiku') ? '0.0000008' : '0.000003',
                                     completion: m.id.includes('opus') ? '0.000075' : m.id.includes('haiku') ? '0.000004' : '0.000015'
                                 },
                                 created: m.created_at ? Math.floor(new Date(m.created_at).getTime() / 1000) : Math.floor(now/1000),
                                 description: `Anthropic ${m.id} model`,
-                                recommended: m.id.includes('haiku')
+                                recommended: m.id.includes('haiku'),
+                                architecture: { modality: 'text+image' },
                             }));
                             
                             allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : []));
@@ -275,14 +391,18 @@ ${jobDescription}
                             // Fallback list
                             allFetchedModels.push({
                                 id: 'claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'Anthropic',
-                                context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                                context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                supportsVision: true,
                                 pricing: { prompt: '0.0000008', completion: '0.000004' },
-                                created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true
+                                created: Math.floor(now/1000), description: 'Fast and cost-effective', recommended: true,
+                                architecture: { modality: 'text+image' }
                             }, {
                                 id: 'claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'Anthropic',
-                                context_length: 200000, supported_parameters: ['temperature', 'max_tokens'],
+                                context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                supportsVision: true,
                                 pricing: { prompt: '0.000003', completion: '0.000015' },
-                                created: Math.floor(now/1000), description: 'Most intelligent model'
+                                created: Math.floor(now/1000), description: 'Most intelligent model',
+                                architecture: { modality: 'text+image' }
                             });
                         }
                     } else if (provider.includes('anthropic') && !provider.includes(',')) {
@@ -302,14 +422,16 @@ ${jobDescription}
                                     name: m.displayName || m.name.replace('models/', ''),
                                     provider: 'Google',
                                     context_length: m.inputTokenLimit || (m.name.includes('pro') ? 2097152 : 1048576),
-                                    supported_parameters: ['temperature', 'max_tokens'],
+                                    supportsVision: inferVisionCapability(m.name.replace('models/', ''), 'Google', 'text+image'),
+                                    supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
                                     pricing: {
                                         prompt: m.name.includes('lite') ? '0.00000005' : m.name.includes('flash') ? '0.000000075' : m.name.includes('pro') ? '0.00000125' : '0.000000075',
                                         completion: m.name.includes('lite') ? '0.0000002' : m.name.includes('flash') ? '0.0000003' : m.name.includes('pro') ? '0.000005' : '0.0000003'
                                     },
                                     created: Math.floor(now/1000),
                                     description: m.description || 'Google Gemini Model',
-                                    recommended: m.name.includes('flash')
+                                    recommended: m.name.includes('flash'),
+                                    architecture: { modality: 'text+image' },
                                 }));
                                 
                             allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : []));
@@ -317,14 +439,18 @@ ${jobDescription}
                             console.error('Failed to fetch Gemini models via API. Falling back to default list.', error);
                             allFetchedModels.push({
                                 id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google',
-                                context_length: 1048576, supported_parameters: ['temperature', 'max_tokens'],
+                                context_length: 1048576, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                supportsVision: true,
                                 pricing: { prompt: '0.000000075', completion: '0.0000003' },
-                                created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true
+                                created: Math.floor(now/1000), description: 'Fast and versatile', recommended: true,
+                                architecture: { modality: 'text+image' }
                             }, {
                                 id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google',
-                                context_length: 2097152, supported_parameters: ['temperature', 'max_tokens'],
+                                context_length: 2097152, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                supportsVision: true,
                                 pricing: { prompt: '0.00000125', completion: '0.000005' },
-                                created: Math.floor(now/1000), description: 'Most capable model'
+                                created: Math.floor(now/1000), description: 'Most capable model',
+                                architecture: { modality: 'text+image' }
                             });
                         }
                     } else if (provider.includes('gemini') && !provider.includes(',')) {
@@ -369,11 +495,13 @@ ${jobDescription}
                                         name: m.id,
                                         provider: 'OpenAI',
                                         context_length: m.id.includes('5.') || m.id.includes('4') || m.id.includes('o1') ? 128000 : 16385,
-                                        supported_parameters: ['temperature', 'max_tokens'],
+                                        supportsVision: inferVisionCapability(m.id, 'OpenAI', 'text+image'),
+                                        supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
                                         pricing: { prompt: promptPrice, completion: compPrice },
                                         created: m.created || Math.floor(now/1000),
                                         description: `OpenAI ${m.id} model`,
-                                        recommended: m.id.includes('gpt-5.4-mini') || m.id.includes('gpt-4o-mini')
+                                        recommended: m.id.includes('gpt-5.4-mini') || m.id.includes('gpt-4o-mini'),
+                                        architecture: { modality: 'text+image' },
                                     };
                                 });
                                 
@@ -382,14 +510,18 @@ ${jobDescription}
                             console.error('Failed to fetch OpenAI models via API.', error);
                             allFetchedModels.push({
                                 id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', provider: 'OpenAI',
-                                context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                                context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                supportsVision: true,
                                 pricing: { prompt: '0.00000075', completion: '0.0000045' },
-                                created: Math.floor(now/1000), description: 'Standard capable model', recommended: true
+                                created: Math.floor(now/1000), description: 'Standard capable model', recommended: true,
+                                architecture: { modality: 'text+image' }
                             }, {
                                  id: 'gpt-5.4', name: 'GPT-5.4', provider: 'OpenAI',
-                                 context_length: 128000, supported_parameters: ['temperature', 'max_tokens'],
+                                 context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                                 supportsVision: true,
                                  pricing: { prompt: '0.0000025', completion: '0.000015' },
-                                 created: Math.floor(now/1000), description: 'Most advanced model'
+                                 created: Math.floor(now/1000), description: 'Most advanced model',
+                                 architecture: { modality: 'text+image' }
                             });
                         }
                     } else if (provider.includes('openai') && !provider.includes(',')) {
@@ -407,12 +539,16 @@ ${jobDescription}
                                 name: model.name || model.id,
                                 provider: model.id.split('/')[0],
                                 context_length: model.context_length || 4096,
+                                supportsVision: inferVisionCapability(model.id, model.provider, model.architecture?.modality),
                                 supported_parameters: model.supported_parameters || [],
                                 per_request_limits: model.per_request_limits,
                                 pricing: model.pricing,
                                 created: model.created,
                                 description: model.description || '',
-                                architecture: model.architecture,
+                                architecture: {
+                                    ...model.architecture,
+                                    modality: model.architecture?.modality || (inferVisionCapability(model.id, model.provider, model.architecture?.modality) ? 'text+image' : 'text'),
+                                },
                                 recommended: model.id === DEFAULT_MODEL,
                             }));
 
@@ -508,7 +644,12 @@ ${jobDescription}
         jobDescription: string,
         selectedModel?: string,
         modelParameters?: ModelParameters,
-        usageContext?: { userId?: string; feature?: string; extractionWarnings?: string[] }
+        usageContext?: {
+            userId?: string;
+            feature?: string;
+            extractionWarnings?: string[];
+            resumeVisualInput?: ResumeVisualInput | null;
+        }
     ): Promise<AnalysisResult> {
         const startedAt = Date.now();
         const safeResumeText = clampModelInputText(normalizeResumeText(text || ''), 60000);
@@ -526,9 +667,12 @@ ${jobDescription}
             jobDescription: safeJobDescription,
             scorecard,
         });
+        const openAiUserContent = this.buildOpenAIUserContent(userPrompt, usageContext?.resumeVisualInput);
+        const anthropicUserContent = this.buildAnthropicUserContent(userPrompt, usageContext?.resumeVisualInput);
 
-        const normalizedMaxTokens = Number.isFinite(Number(modelParameters?.max_tokens))
-            ? Math.min(Math.max(Number(modelParameters?.max_tokens), 500), 16000)
+        const requestedMaxTokens = modelParameters?.max_completion_tokens ?? modelParameters?.max_tokens;
+        const normalizedMaxTokens = Number.isFinite(Number(requestedMaxTokens))
+            ? Math.min(Math.max(Number(requestedMaxTokens), 500), 16000)
             : 4000;
         const normalizedTemperature = Number.isFinite(Number(modelParameters?.temperature))
             ? Math.min(Math.max(Number(modelParameters?.temperature), 0), 2)
@@ -560,7 +704,7 @@ ${jobDescription}
                     system: systemPrompt,
                     max_tokens: Math.min(normalizedMaxTokens, 4096),
                     temperature: normalizedTemperature,
-                    messages: [{ role: 'user', content: userPrompt }]
+                    messages: [{ role: 'user', content: anthropicUserContent as any }]
                 });
                 responseText = completion.content[0]?.type === 'text' ? completion.content[0].text : '';
                 const usage = (completion as any)?.usage;
@@ -580,7 +724,16 @@ ${jobDescription}
                         maxOutputTokens: Math.min(normalizedMaxTokens, 8192),
                     } as any,
                 });
-                const result = await genModel.generateContent(`${systemPrompt}\n\n${userPrompt}`);
+                const geminiParts: any[] = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
+                if (usageContext?.resumeVisualInput) {
+                    geminiParts.push({
+                        inlineData: {
+                            mimeType: usageContext.resumeVisualInput.mimeType,
+                            data: usageContext.resumeVisualInput.base64,
+                        },
+                    });
+                }
+                const result = await genModel.generateContent(geminiParts as any);
                 responseText = result.response.text();
                 const usage = (result as any)?.response?.usageMetadata || (result as any)?.usageMetadata;
                 promptTokens = Number(usage?.promptTokenCount || usage?.inputTokens || 0) || null;
@@ -592,15 +745,14 @@ ${jobDescription}
                     throw new Error('Selected model is not allowed by admin policy');
                 }
                 const openai = new OpenAI({ apiKey: settings.openAiKey || process.env.OPENAI_API_KEY || '' });
-                const completion = await openai.chat.completions.create({
+                const completion = await this.createChatCompletionWithTokenFallback(openai, {
                     model: finalModel,
                     temperature: normalizedTemperature,
-                    max_tokens: Math.min(normalizedMaxTokens, 4096),
                     messages: [
                         { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt },
-                    ]
-                });
+                        { role: 'user', content: openAiUserContent as any },
+                    ],
+                }, Math.min(normalizedMaxTokens, 4096));
                 responseText = completion.choices[0]?.message?.content || '';
                 const usage = (completion as any)?.usage;
                 promptTokens = Number(usage?.prompt_tokens || 0) || null;
@@ -620,16 +772,18 @@ ${jobDescription}
                     model: finalModel,
                     messages: [
                         { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt },
+                        { role: 'user', content: openAiUserContent as any },
                     ],
                     temperature: normalizedTemperature,
-                    max_tokens: Math.min(normalizedMaxTokens, 16000),
-                    seed: 42,
                 };
                 if (modelParameters?.include_reasoning) {
                     completionParams.reasoning_effort = 'medium';
                 }
-                const completion = await openrouter.chat.completions.create(completionParams as any);
+                const completion = await this.createChatCompletionWithTokenFallback(
+                    openrouter,
+                    completionParams as any,
+                    Math.min(normalizedMaxTokens, 16000)
+                );
                 responseText = (completion as OpenAICompletion).choices[0]?.message?.content || '';
                 const usage = (completion as any)?.usage;
                 promptTokens = Number(usage?.prompt_tokens || 0) || null;

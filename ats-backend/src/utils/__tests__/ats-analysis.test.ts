@@ -88,4 +88,42 @@ describe('buildDeterministicAtsScorecard', () => {
       expect.arrayContaining(['Add quantified outcomes to experience bullets so recruiters can measure impact quickly.'])
     );
   });
+
+  it('does not flag top contact info when standard phone and email are present', () => {
+    const resumeText = `
+      Amruta Chaudhari
+      Binghamton, NY | (551) 362-9483 | achaudhari@binghamton.edu | linkedin.com/in/amrutac13
+      EXPERIENCE
+      Engineer at Example Co
+      June 2022 - July 2023
+      - Improved release quality by 30%
+    `;
+
+    const result = buildDeterministicAtsScorecard(resumeText, 'Need React and TypeScript experience');
+
+    expect(result.formattingScore.issues).not.toEqual(
+      expect.arrayContaining(['Contact information is not clearly detectable at the top of the resume.'])
+    );
+  });
+
+  it('does not mistake phone numbers or academic ranges for ATS date styles', () => {
+    const resumeText = `
+      Amruta Chaudhari
+      Binghamton, NY | (551) 362-9483 | achaudhari@binghamton.edu
+      EDUCATION
+      Binghamton University
+      August 2025
+      Coursework 2020-21
+      EXPERIENCE
+      Engineer at Example Co
+      June 2022 - July 2023
+      - Improved release quality by 30%
+    `;
+
+    const result = buildDeterministicAtsScorecard(resumeText, 'Need React and TypeScript experience');
+
+    expect(result.formattingScore.issues).not.toEqual(
+      expect.arrayContaining(['Inconsistent date formats were detected across the resume.'])
+    );
+  });
 });

@@ -6,6 +6,7 @@ import prisma from '../lib/prisma';
 import { Logger } from '../utils/logger';
 import { AnalysisJobData, AnalysisJobResult, registerAnalysisJobProcessor } from '../queues/analysis.queue';
 import { assessResumeExtractionQuality } from '../utils/resume-text-processing';
+import { buildResumeVisualInput } from '../utils/resume-visual-input';
 
 const aiService = new AIService();
 const fileStorage = new FileStorageService();
@@ -26,7 +27,7 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
   registerAnalysisJobProcessor(async (job: Queue.Job<AnalysisJobData>) => {
     Logger.info(`Processing analysis job: ${job.id}`);
 
-    const { userId, resumeText, jobDescription, jobTitle, selectedModel, temperature, max_tokens, include_reasoning } = job.data;
+    const { userId, resumeText, jobDescription, jobTitle, selectedModel, temperature, max_completion_tokens, max_tokens, include_reasoning } = job.data;
 
     try {
       // Update job progress
@@ -54,6 +55,7 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
       // Prepare model parameters
       const modelParameters = {
         temperature,
+        max_completion_tokens,
         max_tokens,
         include_reasoning: include_reasoning || false
       };
@@ -62,6 +64,10 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
       Logger.debug(`Job ${job.id}: Calling AI service (30%)`);
 
       // Call AI service for analysis
+      const resumeVisualInput = job.data.fileBuffer && job.data.fileMimeType
+        ? await buildResumeVisualInput(job.data.fileBuffer, job.data.fileMimeType)
+        : null;
+
       const analysisResult = await aiService.analyzeResume(
         text,
         jobDescription,
@@ -71,6 +77,7 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
           userId,
           feature: 'async_resume_analysis',
           extractionWarnings,
+          resumeVisualInput,
         }
       );
 

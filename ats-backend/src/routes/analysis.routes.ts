@@ -264,6 +264,7 @@ const upload = multer({
  * - jobTitle: Optional job title
  * - selectedModel: Optional model ID to use
  * - temperature: Optional temperature parameter (0-2)
+ * - max_completion_tokens: Optional max completion tokens (500-16000)
  * - max_tokens: Optional max tokens (500-16000)
  * - include_reasoning: Optional boolean
  */
@@ -293,7 +294,8 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
         const selectedModel = typeof body.selectedModel === 'string' ? body.selectedModel : undefined;
 
         const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
-        const maxTokensParam = Number.parseInt(String(body.max_tokens ?? ''), 10);
+        const rawMaxTokens = body.max_completion_tokens ?? body.max_tokens;
+        const maxTokensParam = Number.parseInt(String(rawMaxTokens ?? ''), 10);
         const temperature = Number.isFinite(temperatureParam)
             ? Math.min(Math.max(temperatureParam, 0), 2)
             : undefined;
@@ -368,6 +370,7 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             fileMimeType: req.file.mimetype,
             selectedModel,
             temperature,
+            max_completion_tokens: maxTokens,
             max_tokens: maxTokens,
             include_reasoning: includeReasoning
         });

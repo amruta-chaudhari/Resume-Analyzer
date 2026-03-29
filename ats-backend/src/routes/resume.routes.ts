@@ -25,6 +25,7 @@ import {
   formatResumeForList,
   type ResumeFilterOptions,
 } from '../utils/pagination';
+import { buildResumeVisualInput } from '../utils/resume-visual-input';
 import type {
   ModelParameters,
   ResumeUpdateRequestBody,
@@ -38,15 +39,18 @@ const router: Router = Router();
 
 const parseModelParameters = (body: any): ModelParameters => {
   const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
-  const maxTokensParam = Number.parseInt(String(body.max_tokens ?? ''), 10);
+  const rawMaxTokens = body.max_completion_tokens ?? body.max_tokens;
+  const maxTokensParam = Number.parseInt(String(rawMaxTokens ?? ''), 10);
+  const normalizedMaxTokens = Number.isFinite(maxTokensParam)
+    ? Math.min(Math.max(maxTokensParam, 500), 16000)
+    : undefined;
 
   return {
     temperature: Number.isFinite(temperatureParam)
       ? Math.min(Math.max(temperatureParam, 0), 2)
       : undefined,
-    max_tokens: Number.isFinite(maxTokensParam)
-      ? Math.min(Math.max(maxTokensParam, 500), 16000)
-      : undefined,
+    max_completion_tokens: normalizedMaxTokens,
+    max_tokens: normalizedMaxTokens,
     include_reasoning: body.include_reasoning === 'true' || body.include_reasoning === true,
   };
 };
@@ -521,6 +525,8 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
         title: true,
         extractedText: true,
         content: true,
+        originalFileId: true,
+        originalFileType: true,
       },
     });
 
@@ -534,13 +540,21 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     }
 
     const modelParameters = parseModelParameters(req.body);
+    const resumeVisualInput = resume.originalFileId && resume.originalFileType
+      ? await fileStorage.getFile(resume.originalFileId, req.userId!).then((buffer) => {
+        if (!buffer) {
+          return null;
+        }
+        return buildResumeVisualInput(buffer, resume.originalFileType || '');
+      })
+      : null;
 
     const analysisResult = await aiService.analyzeResume(
       resumeText,
       normalizedJobDescription.trim(),
       selectedModel || undefined,
       modelParameters,
-      { userId: req.userId!, feature: 'stored_resume_analysis' }
+      { userId: req.userId!, feature: 'stored_resume_analysis', resumeVisualInput }
     );
 
     const savedData = await prisma.$transaction(async (tx: any) => {

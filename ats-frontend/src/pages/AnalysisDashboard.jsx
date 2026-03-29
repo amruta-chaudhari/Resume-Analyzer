@@ -178,6 +178,11 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
             No AI model selected. Using default model.
           </p>
         )}
+        {showModelSelector && connectionStatus === 'connected' && (
+          <p className="text-center text-sm text-cyan-700 dark:text-cyan-300 mt-2">
+            Visual ATS mode uses image-capable models so the first page of your PDF can be reviewed alongside extracted text.
+          </p>
+        )}
         {connectionStatus !== 'connected' && (
           <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
             {connectionStatus === 'error' ? 'Connection failed. Please check your backend.' : 'Checking connection...'}

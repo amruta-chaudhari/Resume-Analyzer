@@ -46,7 +46,7 @@ const EXPLICIT_KEYWORD_SEGMENT_REGEX =
 
 const TOKEN_REGEX = /[A-Za-z][A-Za-z0-9.+#/-]{1,24}/g;
 const MONTH_PATTERN = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
-const DATE_TOKEN_SOURCE = `${MONTH_PATTERN}\\s+\\d{4}|\\d{1,2}[/-]\\d{2,4}|\\d{4}[/-]\\d{1,2}|\\b\\d{4}\\b|present|current|now`;
+const DATE_TOKEN_SOURCE = `${MONTH_PATTERN}\\s+\\d{4}|(?<!\\d)(?:0?[1-9]|1[0-2])[/-]\\d{4}(?!\\d)|(?<!\\d)\\d{4}[/-](?:0?[1-9]|1[0-2])(?!\\d)|(?<![\\d-])\\b\\d{4}\\b(?!-\\d{2,4})|present|current|now`;
 const DATE_RANGE_REGEX = new RegExp(`(${DATE_TOKEN_SOURCE})\\s*(?:-|–|—|to)\\s*(${DATE_TOKEN_SOURCE})`, 'gi');
 
 const SECTION_HEADERS = [
@@ -208,7 +208,7 @@ const classifyDateStyle = (raw: string): string => {
     return 'present';
   }
   if (new RegExp(`^${MONTH_PATTERN}\\s+\\d{4}$`, 'i').test(raw)) {
-    return /^[A-Z][a-z]{3,9}\s+\d{4}$/.test(raw) ? 'MMMM YYYY' : 'MMM YYYY';
+    return 'MONTH YYYY';
   }
   if (/^\d{1,2}\/\d{4}$/.test(raw)) {
     return 'MM/YYYY';
@@ -279,9 +279,13 @@ const parseDateToken = (rawValue: string): { year: number | null; month: number 
 
   match = raw.match(/^(\d{1,2})\/(\d{4})$/);
   if (match) {
+    const month = Number(match[1]);
+    if (month < 1 || month > 12) {
+      return null;
+    }
     return {
       year: Number(match[2]),
-      month: Number(match[1]),
+      month,
       isPresent: false,
       style: 'MM/YYYY',
     };
@@ -289,9 +293,13 @@ const parseDateToken = (rawValue: string): { year: number | null; month: number 
 
   match = raw.match(/^(\d{1,2})-(\d{4})$/);
   if (match) {
+    const month = Number(match[1]);
+    if (month < 1 || month > 12) {
+      return null;
+    }
     return {
       year: Number(match[2]),
-      month: Number(match[1]),
+      month,
       isPresent: false,
       style: 'MM-YYYY',
     };
@@ -299,9 +307,13 @@ const parseDateToken = (rawValue: string): { year: number | null; month: number 
 
   match = raw.match(/^(\d{4})-(\d{1,2})$/);
   if (match) {
+    const month = Number(match[2]);
+    if (month < 1 || month > 12) {
+      return null;
+    }
     return {
       year: Number(match[1]),
-      month: Number(match[2]),
+      month,
       isPresent: false,
       style: 'YYYY-MM',
     };
@@ -538,7 +550,7 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
   const lines = resumeText.split('\n').map((line) => line.trim()).filter(Boolean);
   const firstLines = lines.slice(0, 6).join(' ');
   const hasEmail = /[^\s@]+@[^\s@]+\.[^\s@]+/.test(firstLines);
-  const hasPhone = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3}[\s.-]?\d{3,4}[\s.-]?\d{3,4}/.test(firstLines);
+  const hasPhone = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\d{3}[\s.-]?\d{3}[\s.-]?\d{4})/.test(firstLines);
   const foundSections = SECTION_HEADERS.filter((section) =>
     lines.some((line) => line.toLowerCase() === section || line.toLowerCase().startsWith(`${section} `))
   );
@@ -548,7 +560,7 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
   const probableTableLines = lines.filter((line) => line.includes('\t') || /\S\s{5,}\S/.test(line));
   const dateStyleMatches = Array.from(resumeText.matchAll(new RegExp(DATE_TOKEN_SOURCE, 'gi')))
     .map((match) => classifyDateStyle(match[0]))
-    .filter((style) => style !== 'present' && style !== 'unknown');
+    .filter((style) => style !== 'present' && style !== 'unknown' && style !== 'YYYY');
   const dateStyles = dedupeStrings(dateStyleMatches);
 
   if (!hasEmail || !hasPhone) {

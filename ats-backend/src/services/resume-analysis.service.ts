@@ -100,6 +100,57 @@ const parsedResumeSchema = z.object({
 }).passthrough();
 
 export class ResumeAnalysisService {
+  private getErrorMessage(error: unknown): string {
+    if (!error || typeof error !== 'object') {
+      return '';
+    }
+
+    const candidate = error as {
+      message?: string;
+      error?: { message?: string };
+      response?: { data?: { error?: { message?: string }; message?: string } };
+    };
+
+    return (
+      candidate.error?.message ||
+      candidate.response?.data?.error?.message ||
+      candidate.response?.data?.message ||
+      candidate.message ||
+      ''
+    );
+  }
+
+  private isUnsupportedParameterError(error: unknown, parameter: 'max_tokens' | 'max_completion_tokens'): boolean {
+    const message = this.getErrorMessage(error).toLowerCase();
+    if (!message) {
+      return false;
+    }
+
+    return message.includes('unsupported parameter') && message.includes(parameter);
+  }
+
+  private async createChatCompletionWithTokenFallback(
+    client: OpenAI,
+    params: Record<string, unknown>,
+    maxTokens: number
+  ): Promise<any> {
+    try {
+      return await client.chat.completions.create({
+        ...params,
+        max_completion_tokens: maxTokens,
+      } as any);
+    } catch (error) {
+      if (!this.isUnsupportedParameterError(error, 'max_completion_tokens')) {
+        throw error;
+      }
+
+      return await client.chat.completions.create({
+        ...params,
+        max_tokens: maxTokens,
+      } as any);
+    }
+  }
+
   /**
    * Extracts readable text from structured resume data
    * Delegates to shared utility for consistency across services
@@ -188,7 +239,7 @@ export class ResumeAnalysisService {
     const startedAt = Date.now();
 
     try {
-      const completion = await openai.chat.completions.create({
+      const completion = await this.createChatCompletionWithTokenFallback(openai, {
         model: model,
         messages: [
           {
@@ -218,8 +269,7 @@ export class ResumeAnalysisService {
           }
         ],
         temperature: 0.3,
-        max_tokens: 2000,
-      });
+      }, 2000);
 
       const responseContent = completion.choices[0].message.content;
 

@@ -13,6 +13,7 @@ export interface AnalysisJobData {
   fileMimeType?: string;
   selectedModel?: string;
   temperature?: number;
+  max_completion_tokens?: number;
   max_tokens?: number;
   include_reasoning?: boolean;
 }

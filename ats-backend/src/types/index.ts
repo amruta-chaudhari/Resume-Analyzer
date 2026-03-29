@@ -34,6 +34,7 @@ export interface AIModel {
   provider: string;
   context_length: number;
   recommended?: boolean;
+  supportsVision?: boolean;
   supported_parameters: string[];
   per_request_limits?: {
     input_tokens?: number;
@@ -55,6 +56,7 @@ export interface AIModel {
 export interface ModelParameters {
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean;
 }
 
@@ -292,6 +294,7 @@ export interface AnalyzeRequestBody {
   selectedModel?: string;
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean | string;
 }
 
@@ -308,6 +311,7 @@ export interface ResumeAnalyzeRequestBody {
   selectedModel?: string;
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean | string;
 }
 
@@ -330,9 +334,10 @@ export interface CompletionParameters {
     role: 'user' | 'assistant' | 'system';
     content: string;
   }>;
-  temperature: number;
-  max_tokens: number;
-  seed: number;
+  temperature?: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
 }
 

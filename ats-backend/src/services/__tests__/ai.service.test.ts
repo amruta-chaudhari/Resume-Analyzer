@@ -280,7 +280,7 @@ describe('AIService', () => {
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           temperature: 0.5,
-          max_tokens: 1000,
+          max_completion_tokens: 1000,
         })
       );
     });
@@ -469,7 +469,7 @@ describe('AIService', () => {
       );
 
       const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-      expect(callArgs.max_tokens).toBeLessThanOrEqual(16000);
+      expect(callArgs.max_completion_tokens).toBeLessThanOrEqual(16000);
     });
 
     it('should use default temperature if not specified', async () => {
