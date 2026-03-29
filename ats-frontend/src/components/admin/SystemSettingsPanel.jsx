@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import { adminCardClass, adminFieldClass } from '../../pages/admin/shared';
 
-const PLAN_ORDER = ['free', 'pro', 'enterprise', 'admin'];
+const DEFAULT_PLAN_ORDER = ['free', 'pro', 'enterprise', 'admin'];
 
 const providerOptions = [
   { id: 'openrouter', label: 'OpenRouter', description: 'OpenRouter catalog and routing' },
@@ -23,9 +23,29 @@ const safeParse = (value, fallback) => {
   }
 };
 
+const parseCommaList = (value) => {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  const values = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return values.length > 0 ? Array.from(new Set(values)) : null;
+};
+
+const getSortedPlanKeys = (planLimits) => {
+  const allKeys = Object.keys(planLimits || {});
+  const defaultKeys = DEFAULT_PLAN_ORDER.filter((key) => allKeys.includes(key));
+  const customKeys = allKeys.filter((key) => !DEFAULT_PLAN_ORDER.includes(key)).sort();
+  return [...defaultKeys, ...customKeys];
+};
+
 const normalizeProviderList = (value) => {
   if (!value || typeof value !== 'string') {
-    return ['openrouter'];
+    return providerOptions.map((provider) => provider.id);
   }
 
   if (value === 'multiple') {
@@ -38,7 +58,7 @@ const normalizeProviderList = (value) => {
     .filter(Boolean);
 
   if (selected.length === 0) {
-    return ['openrouter'];
+    return providerOptions.map((provider) => provider.id);
   }
 
   return Array.from(new Set(selected));
@@ -89,6 +109,7 @@ const SystemSettingsPanel = () => {
   const [allowedModels, setAllowedModels] = useState([]);
   const [modelPricing, setModelPricing] = useState({});
   const [planLimits, setPlanLimits] = useState({});
+  const [newPlanKey, setNewPlanKey] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,6 +121,7 @@ const SystemSettingsPanel = () => {
     () => providerOptions.filter((provider) => settings.selectedProviders.includes(provider.id)),
     [settings.selectedProviders]
   );
+  const planKeys = useMemo(() => getSortedPlanKeys(planLimits), [planLimits]);
 
   const fetchModels = async (providerSelection) => {
     setModelsLoading(true);
@@ -236,10 +258,42 @@ const SystemSettingsPanel = () => {
     }));
   };
 
+  const handleAddPlan = () => {
+    const normalizedKey = newPlanKey.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!normalizedKey || planLimits[normalizedKey]) {
+      return;
+    }
+
+    setPlanLimits((previous) => ({
+      ...previous,
+      [normalizedKey]: {
+        monthlyBudgetUsd: null,
+        monthlyTokenLimit: null,
+        monthlyRequestLimit: null,
+        allowReasoning: false,
+        allowedModels: null,
+        allowedProviders: null,
+      },
+    }));
+    setNewPlanKey('');
+  };
+
+  const handleRemovePlan = (planKey) => {
+    if (DEFAULT_PLAN_ORDER.includes(planKey)) {
+      return;
+    }
+
+    setPlanLimits((previous) => {
+      const next = { ...previous };
+      delete next[planKey];
+      return next;
+    });
+  };
+
   const normalizePlanLimitsPayload = () => {
     const normalized = {};
 
-    for (const tier of PLAN_ORDER) {
+    for (const tier of planKeys) {
       const currentTier = planLimits[tier] || {};
       const budgetRaw = currentTier.monthlyBudgetUsd;
       const tokenRaw = currentTier.monthlyTokenLimit;
@@ -256,7 +310,10 @@ const SystemSettingsPanel = () => {
         allowReasoning: Boolean(currentTier.allowReasoning),
         allowedModels: Array.isArray(currentTier.allowedModels)
           ? currentTier.allowedModels.filter((item) => typeof item === 'string' && item.trim().length > 0)
-          : null,
+          : parseCommaList(currentTier.allowedModels),
+        allowedProviders: Array.isArray(currentTier.allowedProviders)
+          ? currentTier.allowedProviders.filter((item) => typeof item === 'string' && item.trim().length > 0)
+          : parseCommaList(currentTier.allowedProviders),
       };
     }
 
@@ -551,16 +608,48 @@ const SystemSettingsPanel = () => {
           </div>
 
           <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Plan LLM Limits</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Define default monthly budget and token caps by subscription tier.</p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Plan Catalog And LLM Limits</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Define plan-specific budgets, request caps, model access, and provider access.</p>
+              </div>
+              <div className="flex w-full gap-3 lg:w-auto">
+                <input
+                  type="text"
+                  value={newPlanKey}
+                  onChange={(event) => setNewPlanKey(event.target.value)}
+                  placeholder="new-plan-key"
+                  className="w-full rounded-2xl border border-slate-300/70 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white lg:w-64"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPlan}
+                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Add Plan
+                </button>
+              </div>
+            </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              {PLAN_ORDER.map((tier) => {
+              {planKeys.map((tier) => {
                 const limit = planLimits[tier] || {};
+                const canRemove = !DEFAULT_PLAN_ORDER.includes(tier);
 
                 return (
                   <div key={tier} className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/60">
-                    <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200">{tier}</h4>
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-200">{tier}</h4>
+                      {canRemove && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePlan(tier)}
+                          className="rounded-xl border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
 
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
@@ -595,6 +684,28 @@ const SystemSettingsPanel = () => {
                           step="1"
                           value={limit.monthlyRequestLimit ?? ''}
                           onChange={(event) => setPlanField(tier, 'monthlyRequestLimit', event.target.value)}
+                          className={adminFieldClass}
+                        />
+                      </label>
+
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
+                        Allowed Models
+                        <input
+                          type="text"
+                          value={Array.isArray(limit.allowedModels) ? limit.allowedModels.join(', ') : (limit.allowedModels || '')}
+                          onChange={(event) => setPlanField(tier, 'allowedModels', event.target.value)}
+                          placeholder="Empty = all models allowed"
+                          className={adminFieldClass}
+                        />
+                      </label>
+
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
+                        Allowed Providers
+                        <input
+                          type="text"
+                          value={Array.isArray(limit.allowedProviders) ? limit.allowedProviders.join(', ') : (limit.allowedProviders || '')}
+                          onChange={(event) => setPlanField(tier, 'allowedProviders', event.target.value)}
+                          placeholder="openrouter, openai, gemini, anthropic"
                           className={adminFieldClass}
                         />
                       </label>

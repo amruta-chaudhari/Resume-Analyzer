@@ -1,9 +1,10 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 
-export type PlanLimitTier = 'free' | 'pro' | 'enterprise' | 'admin';
+export type PlanLimitTier = string;
 export const ALL_AI_PROVIDERS = ['openrouter', 'openai', 'gemini', 'anthropic'] as const;
 export type AiProviderId = (typeof ALL_AI_PROVIDERS)[number];
+export const DEFAULT_ACTIVE_PROVIDERS = ALL_AI_PROVIDERS.join(',');
 
 export interface PlanLimitConfig {
   monthlyBudgetUsd: number | null;
@@ -11,14 +12,10 @@ export interface PlanLimitConfig {
   monthlyRequestLimit: number | null;
   allowReasoning: boolean;
   allowedModels: string[] | null;
+  allowedProviders: AiProviderId[] | null;
 }
 
-export interface PlanLimitsConfig {
-  free: PlanLimitConfig;
-  pro: PlanLimitConfig;
-  enterprise: PlanLimitConfig;
-  admin: PlanLimitConfig;
-}
+export type PlanLimitsConfig = Record<string, PlanLimitConfig>;
 
 export interface EffectiveLlmPolicy {
   subscriptionTier: string;
@@ -60,6 +57,7 @@ const DEFAULT_PLAN_LIMITS: PlanLimitsConfig = {
     monthlyRequestLimit: 40,
     allowReasoning: false,
     allowedModels: null,
+    allowedProviders: null,
   },
   pro: {
     monthlyBudgetUsd: 25,
@@ -67,6 +65,7 @@ const DEFAULT_PLAN_LIMITS: PlanLimitsConfig = {
     monthlyRequestLimit: 600,
     allowReasoning: true,
     allowedModels: null,
+    allowedProviders: null,
   },
   enterprise: {
     monthlyBudgetUsd: 200,
@@ -74,6 +73,7 @@ const DEFAULT_PLAN_LIMITS: PlanLimitsConfig = {
     monthlyRequestLimit: 6000,
     allowReasoning: true,
     allowedModels: null,
+    allowedProviders: null,
   },
   admin: {
     monthlyBudgetUsd: null,
@@ -81,6 +81,7 @@ const DEFAULT_PLAN_LIMITS: PlanLimitsConfig = {
     monthlyRequestLimit: null,
     allowReasoning: true,
     allowedModels: null,
+    allowedProviders: null,
   },
 };
 
@@ -158,27 +159,42 @@ const normalizePlanLimitEntry = (
     allowReasoning:
       typeof record.allowReasoning === 'boolean' ? record.allowReasoning : base.allowReasoning,
     allowedModels: normalizeStringArray(record.allowedModels) ?? base.allowedModels,
+    allowedProviders: normalizeProviderArray(record.allowedProviders) ?? base.allowedProviders,
   };
 };
 
 const normalizePlanLimits = (value: unknown): PlanLimitsConfig => {
   if (!value || typeof value !== 'object') {
-    return DEFAULT_PLAN_LIMITS;
+    return { ...DEFAULT_PLAN_LIMITS };
   }
 
   const record = value as Record<string, unknown>;
+  const normalized: PlanLimitsConfig = {};
+  const planKeys = Array.from(new Set([
+    ...Object.keys(DEFAULT_PLAN_LIMITS),
+    ...Object.keys(record),
+  ])).filter(Boolean);
 
-  return {
-    free: normalizePlanLimitEntry(DEFAULT_PLAN_LIMITS.free, record.free),
-    pro: normalizePlanLimitEntry(DEFAULT_PLAN_LIMITS.pro, record.pro),
-    enterprise: normalizePlanLimitEntry(DEFAULT_PLAN_LIMITS.enterprise, record.enterprise),
-    admin: normalizePlanLimitEntry(DEFAULT_PLAN_LIMITS.admin, record.admin),
-  };
+  for (const key of planKeys) {
+    const normalizedKey = key.trim().toLowerCase();
+    if (!normalizedKey) {
+      continue;
+    }
+
+    const base = DEFAULT_PLAN_LIMITS[normalizedKey] || DEFAULT_PLAN_LIMITS.free;
+    normalized[normalizedKey] = normalizePlanLimitEntry(base, record[key]);
+  }
+
+  if (!normalized.free) {
+    normalized.free = { ...DEFAULT_PLAN_LIMITS.free };
+  }
+
+  return normalized;
 };
 
 const normalizeProviderValue = (value: unknown): string => {
   if (typeof value !== 'string') {
-    return 'openrouter';
+    return DEFAULT_ACTIVE_PROVIDERS;
   }
 
   const normalized = value.trim().toLowerCase();
@@ -196,7 +212,7 @@ const normalizeProviderValue = (value: unknown): string => {
     .filter((item) => PROVIDER_VALUES.has(item) && item !== 'multiple');
 
   if (parts.length === 0) {
-    return 'openrouter';
+    return DEFAULT_ACTIVE_PROVIDERS;
   }
 
   return Array.from(new Set(parts)).join(',');
@@ -204,7 +220,7 @@ const normalizeProviderValue = (value: unknown): string => {
 
 export const parseProviderList = (value: string | null | undefined): AiProviderId[] => {
   if (!value) {
-    return ['openrouter'];
+    return [...ALL_AI_PROVIDERS];
   }
 
   const normalized = value.trim().toLowerCase();
@@ -217,7 +233,7 @@ export const parseProviderList = (value: string | null | undefined): AiProviderI
     .map((item) => item.trim())
     .filter((item): item is AiProviderId => (ALL_AI_PROVIDERS as readonly string[]).includes(item));
 
-  return parts.length > 0 ? Array.from(new Set(parts)) : ['openrouter'];
+  return parts.length > 0 ? Array.from(new Set(parts)) : [...ALL_AI_PROVIDERS];
 };
 
 const maskSecret = (value: string | null): string | null => {
@@ -298,7 +314,7 @@ export class SystemSettingsService {
 
     const resolvedSettings: LoadedSettingsRow = settings ?? {
       id: 'global',
-      activeAiProvider: 'openrouter',
+      activeAiProvider: DEFAULT_ACTIVE_PROVIDERS,
       openRouterKey: null,
       openAiKey: null,
       geminiKey: null,
@@ -360,7 +376,7 @@ export class SystemSettingsService {
   }): Promise<EffectiveLlmPolicy> {
     const normalizedTier = (user.subscriptionTier || 'free').toLowerCase() as PlanLimitTier;
     const planLimits = await this.getPlanLimits();
-    const tierLimits = planLimits[normalizedTier] || planLimits.free;
+    const tierLimits = planLimits[normalizedTier] || planLimits.free || Object.values(planLimits)[0] || DEFAULT_PLAN_LIMITS.free;
     const userAllowedModels = normalizeStringArray(safeJsonParse<unknown>(user.llmAllowedModels, null));
     const userAllowedProviders = normalizeProviderArray(safeJsonParse<unknown>(user.llmAllowedProviders, null));
 
@@ -381,7 +397,7 @@ export class SystemSettingsService {
       allowReasoning:
         user.llmAllowReasoning != null ? Boolean(user.llmAllowReasoning) : tierLimits.allowReasoning,
       allowedModels: userAllowedModels ?? tierLimits.allowedModels,
-      allowedProviders: userAllowedProviders,
+      allowedProviders: userAllowedProviders ?? tierLimits.allowedProviders,
     };
   }
 

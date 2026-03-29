@@ -104,8 +104,12 @@ const validatePlanLimitsString = (raw: unknown): boolean => {
     return false;
   }
 
-  const tiers = ['free', 'pro', 'enterprise', 'admin'];
-  return tiers.every((tier) => {
+  const planKeys = Object.keys(parsed);
+  if (planKeys.length === 0) {
+    return false;
+  }
+
+  return planKeys.every((tier) => {
     const tierValue = parsed[tier];
     if (!tierValue || typeof tierValue !== 'object' || Array.isArray(tierValue)) {
       return false;
@@ -117,6 +121,7 @@ const validatePlanLimitsString = (raw: unknown): boolean => {
     const requests = tierRecord.monthlyRequestLimit;
     const allowReasoning = tierRecord.allowReasoning;
     const allowedModels = tierRecord.allowedModels;
+    const allowedProviders = tierRecord.allowedProviders;
 
     const isNumberOrNull = (candidate: unknown) => {
       if (candidate == null || candidate === '') {
@@ -131,12 +136,17 @@ const validatePlanLimitsString = (raw: unknown): boolean => {
       allowedModels == null ||
       (Array.isArray(allowedModels) && allowedModels.every((item) => typeof item === 'string'));
 
+    const isAllowedProvidersValid =
+      allowedProviders == null ||
+      (Array.isArray(allowedProviders) && allowedProviders.every((item) => typeof item === 'string'));
+
     return (
       isNumberOrNull(budget) &&
       isNumberOrNull(tokens) &&
       isNumberOrNull(requests) &&
       typeof allowReasoning === 'boolean' &&
-      isAllowedModelsValid
+      isAllowedModelsValid &&
+      isAllowedProvidersValid
     );
   });
 };

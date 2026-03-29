@@ -42,6 +42,7 @@ const AdminUserDetailPage = () => {
   const updateCurrentUser = useAuthStore((state) => state.updateUser);
 
   const [userDetail, setUserDetail] = useState(null);
+  const [availablePlans, setAvailablePlans] = useState(['free', 'pro', 'enterprise', 'admin']);
   const [formState, setFormState] = useState(emptyFormState);
   const [newPassword, setNewPassword] = useState('');
 
@@ -69,8 +70,15 @@ const AdminUserDetailPage = () => {
     setErrorMessage('');
 
     try {
-      const detail = await adminService.getUser(targetUserId);
+      const [detail, settings] = await Promise.all([
+        adminService.getUser(targetUserId),
+        adminService.getSystemSettings(),
+      ]);
       const role = normalizeUserRole(detail.user);
+      const planKeys = Object.keys(settings?.planLimitsResolved || {});
+      if (planKeys.length > 0) {
+        setAvailablePlans(planKeys);
+      }
 
       setUserDetail(detail);
       setFormState({
@@ -445,10 +453,9 @@ const AdminUserDetailPage = () => {
                 onChange={(event) => handleFieldChange('subscriptionTier', event.target.value)}
                 className={adminFieldClass}
               >
-                <option value="free">free</option>
-                <option value="pro">pro</option>
-                <option value="enterprise">enterprise</option>
-                <option value="admin">admin</option>
+                {availablePlans.map((plan) => (
+                  <option key={plan} value={plan}>{plan}</option>
+                ))}
               </select>
             </label>
 

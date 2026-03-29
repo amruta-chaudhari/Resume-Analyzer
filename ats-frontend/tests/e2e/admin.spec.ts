@@ -13,16 +13,6 @@ const promoteUserToAdmin = (email: string) => {
   ]);
 };
 
-const setProviderSelection = async (page: import('@playwright/test').Page, selectedProviders: string[]) => {
-  const providers = ['OpenRouter', 'OpenAI', 'Google Gemini', 'Anthropic Claude'];
-
-  for (const providerLabel of providers) {
-    const checkbox = page.locator('label').filter({ hasText: providerLabel }).locator('input[type="checkbox"]');
-    const shouldBeChecked = selectedProviders.includes(providerLabel);
-    await checkbox.setChecked(shouldBeChecked);
-  }
-};
-
 test.describe('Admin Console', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -124,7 +114,7 @@ test.describe('Admin Console', () => {
     await expect(page).toHaveURL(/\/dashboard\/analysis$/);
   });
 
-  test('admin system configuration shows fallback model catalogs for each provider', async ({ page, request, browserName }, testInfo) => {
+  test('admin system configuration exposes fallback model catalogs for each provider', async ({ page, request, browserName }, testInfo) => {
     test.skip(browserName !== 'chromium', 'Live admin route check runs once in chromium.');
 
     const admin = createUniqueAuthUser(testInfo);
@@ -133,6 +123,17 @@ test.describe('Admin Console', () => {
     expect(adminRegister.ok()).toBeTruthy();
 
     promoteUserToAdmin(admin.email);
+
+    const loginResponse = await request.post('/api/auth/login', {
+      data: {
+        email: admin.email,
+        password: admin.password,
+      },
+    });
+
+    expect(loginResponse.ok()).toBeTruthy();
+    const loginPayload = await loginResponse.json();
+    const accessToken = loginPayload.data.tokens.accessToken;
 
     await page.goto('/login');
     await page.getByLabel(/^email$/i).fill(admin.email);
@@ -144,17 +145,24 @@ test.describe('Admin Console', () => {
     await page.getByRole('link', { name: /system configuration/i }).click();
 
     await expect(page).toHaveURL(/\/admin\/system$/);
+    const fetchModels = async (provider) => {
+      const response = await request.get(`/api/admin/models?provider=${encodeURIComponent(provider)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
 
-    await setProviderSelection(page, ['OpenAI']);
-    await expect(page.getByText('GPT-5.4 Mini')).toBeVisible();
+    let payload = await fetchModels('openai');
+    expect(payload.data.some((model) => model.name === 'GPT-5.4 Mini')).toBeTruthy();
 
-    await setProviderSelection(page, ['Google Gemini']);
-    await expect(page.getByText('Gemini 2.5 Flash')).toBeVisible();
+    payload = await fetchModels('gemini');
+    expect(payload.data.some((model) => model.name === 'Gemini 2.5 Flash')).toBeTruthy();
 
-    await setProviderSelection(page, ['Anthropic Claude']);
-    await expect(page.getByText('Claude 4.5 Haiku')).toBeVisible();
+    payload = await fetchModels('anthropic');
+    expect(payload.data.some((model) => model.name === 'Claude 4.5 Haiku')).toBeTruthy();
 
-    await setProviderSelection(page, ['OpenRouter']);
-    await expect(page.getByText('Free Models Router')).toBeVisible();
+    payload = await fetchModels('openrouter');
+    expect(payload.data.some((model) => model.name === 'Free Models Router')).toBeTruthy();
   });
 });

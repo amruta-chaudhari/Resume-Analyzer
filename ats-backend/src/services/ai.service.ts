@@ -422,17 +422,20 @@ export class AIService {
         const allowedProviders = policy?.allowedProviders && policy.allowedProviders.length > 0
             ? configuredProviders.filter((provider) => policy!.allowedProviders!.includes(provider))
             : configuredProviders;
+        const credentialProviders = (['openrouter', 'openai', 'gemini', 'anthropic'] as AiProviderId[])
+            .filter((provider) => Boolean(credentials[provider].apiKey));
         const availableProviders = allowedProviders.filter((provider) => Boolean(credentials[provider].apiKey));
+        const effectiveProviders = availableProviders.length > 0 ? availableProviders : credentialProviders;
 
-        if (availableProviders.length === 0) {
-            throw new Error('No AI providers are configured for this user');
+        if (effectiveProviders.length === 0) {
+            throw new Error('No AI providers are configured for this user or globally');
         }
 
-        const providerOverride = availableProviders.join(',');
+        const providerOverride = effectiveProviders.join(',');
         let candidates = await this.getAvailableModels(false, false, providerOverride);
         candidates = candidates.filter((model) => {
             const runtimeProvider = this.normalizeRuntimeProvider(model.provider, model.id);
-            return availableProviders.includes(runtimeProvider);
+            return effectiveProviders.includes(runtimeProvider);
         });
 
         if (params.requireVision) {
@@ -522,7 +525,7 @@ export class AIService {
             apiKey: credentials[selectedCandidate.runtimeProvider].apiKey,
             usageSummary,
             policy,
-            availableProviders,
+            availableProviders: effectiveProviders,
         };
     }
 
