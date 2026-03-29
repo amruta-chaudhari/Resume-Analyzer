@@ -3,9 +3,18 @@ import axios from 'axios';
 import OpenAI from 'openai';
 import { MockDataFactory } from '../../__tests__/factories';
 import { TestHelpers } from '../../__tests__/helpers';
+import { systemSettingsService } from '../system-settings.service';
 
 // Mock axios
 jest.mock('axios');
+
+jest.mock('../system-settings.service', () => ({
+  __esModule: true,
+  systemSettingsService: {
+    getSettings: jest.fn(),
+    getEffectiveLlmPolicy: jest.fn(),
+  },
+}));
 
 // Create mock implementation that returns a proper mock instance
 const mockChatCompletionsCreate = jest.fn();
@@ -24,12 +33,23 @@ describe('AIService', () => {
   let aiService: AIService;
   let mockAxios: any;
   let mockOpenAI: any;
+  let mockSystemSettingsService: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     aiService = new AIService();
     mockAxios = axios as any;
     mockOpenAI = OpenAI as any;
+    mockSystemSettingsService = systemSettingsService as any;
+    mockSystemSettingsService.getSettings.mockResolvedValue({
+      activeAiProvider: 'openrouter',
+      openRouterKey: null,
+      openAiKey: null,
+      geminiKey: null,
+      anthropicKey: null,
+      allowedModels: null,
+      modelPricing: null,
+    });
   });
 
   describe('analyzeFormattingIssues', () => {

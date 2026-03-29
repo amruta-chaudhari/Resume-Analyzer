@@ -57,6 +57,21 @@ describe('AI environment fallback', () => {
       default: mockOpenAI,
     }));
 
+    jest.doMock('../system-settings.service', () => ({
+      __esModule: true,
+      systemSettingsService: {
+        getSettings: jest.fn().mockResolvedValue({
+          activeAiProvider: 'openrouter',
+          openRouterKey: null,
+          openAiKey: null,
+          geminiKey: null,
+          anthropicKey: null,
+          allowedModels: null,
+          modelPricing: null,
+        }),
+      },
+    }));
+
     const { AIService } = await import('../ai.service');
     const aiService = new AIService();
 
@@ -100,6 +115,43 @@ describe('AI environment fallback', () => {
     jest.doMock('openai', () => ({
       __esModule: true,
       default: mockOpenAI,
+    }));
+
+    jest.doMock('../../lib/prisma', () => ({
+      __esModule: true,
+      default: {
+        user: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            role: 'USER',
+            subscriptionTier: 'free',
+            llmMonthlyBudgetUsd: null,
+            llmMonthlyTokenLimit: null,
+            llmAllowReasoning: null,
+            llmAllowedModels: null,
+          }),
+        },
+        aiUsage: {
+          findMany: jest.fn().mockResolvedValue([]),
+          create: jest.fn().mockResolvedValue({ id: 'usage-1' }),
+        },
+      },
+    }));
+
+    jest.doMock('../system-settings.service', () => ({
+      __esModule: true,
+      systemSettingsService: {
+        getSettings: jest.fn().mockResolvedValue({
+          allowedModels: null,
+        }),
+        getEffectiveLlmPolicy: jest.fn().mockResolvedValue({
+          allowedModels: null,
+          monthlyTokenLimit: null,
+          monthlyBudgetUsd: null,
+          allowReasoning: true,
+          subscriptionTier: 'free',
+        }),
+      },
     }));
 
     const { ResumeAnalysisService } = await import('../resume-analysis.service');

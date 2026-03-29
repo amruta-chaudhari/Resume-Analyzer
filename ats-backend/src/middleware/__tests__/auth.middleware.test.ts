@@ -46,6 +46,7 @@ describe('authMiddleware', () => {
       const mockUser = MockDataFactory.createUser({ id: userId, email });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: mockUser.id,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -68,6 +69,7 @@ describe('authMiddleware', () => {
 
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -87,6 +89,7 @@ describe('authMiddleware', () => {
 
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -105,6 +108,7 @@ describe('authMiddleware', () => {
 
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -151,6 +155,7 @@ describe('authMiddleware', () => {
 
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: TestConstants.TEST_USER_ID,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -164,7 +169,10 @@ describe('authMiddleware', () => {
       // Verify that the token (without Bearer) was used
       expect(mockJwt.verify).toHaveBeenCalledWith(
         token,
-        process.env.JWT_SECRET
+        process.env.JWT_SECRET,
+        expect.objectContaining({
+          algorithms: ['HS256'],
+        })
       );
     });
   });
@@ -250,6 +258,7 @@ describe('authMiddleware', () => {
       mockJwt.verify.mockReturnValueOnce({ userId, email });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: new Date(),
       });
 
@@ -268,6 +277,7 @@ describe('authMiddleware', () => {
       mockJwt.verify.mockReturnValueOnce({ userId, email });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -275,7 +285,7 @@ describe('authMiddleware', () => {
 
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: userId },
-        select: { id: true, deletedAt: true },
+        select: { id: true, role: true, deletedAt: true },
       });
     });
 
@@ -287,13 +297,14 @@ describe('authMiddleware', () => {
       mockJwt.verify.mockReturnValueOnce({ userId, email: 'test@example.com' });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
       await authMiddleware(mockReq, mockRes, mockNext);
 
       const callArgs = mockPrisma.user.findUnique.mock.calls[0][0];
-      expect(callArgs.select).toEqual({ id: true, deletedAt: true });
+      expect(callArgs.select).toEqual({ id: true, role: true, deletedAt: true });
     });
   });
 
@@ -366,6 +377,7 @@ describe('authMiddleware', () => {
       mockJwt.verify.mockReturnValueOnce({ userId, email });
       mockPrisma.user.findUnique.mockResolvedValueOnce({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -410,6 +422,7 @@ describe('authMiddleware', () => {
       mockJwt.verify.mockReturnValue({ userId, email });
       mockPrisma.user.findUnique.mockResolvedValue({
         id: userId,
+        role: 'USER',
         deletedAt: null,
       });
 
@@ -443,6 +456,7 @@ describe('authMiddleware', () => {
         });
         mockPrisma.user.findUnique.mockResolvedValueOnce({
           id: userId,
+          role: 'USER',
           deletedAt: null,
         });
 
