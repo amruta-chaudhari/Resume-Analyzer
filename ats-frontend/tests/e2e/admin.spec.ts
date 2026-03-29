@@ -9,7 +9,7 @@ const promoteUserToAdmin = (email: string) => {
   const escapedEmail = email.replace(/'/g, "''");
   execFileSync('sqlite3', [
     databasePath,
-    `UPDATE users SET subscriptionTier = 'admin', emailVerified = 1 WHERE email = '${escapedEmail}';`,
+    `UPDATE users SET role = 'ADMIN', subscriptionTier = 'admin', emailVerified = 1 WHERE email = '${escapedEmail}';`,
   ]);
 };
 

@@ -22,7 +22,12 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (requireAdmin && user?.subscriptionTier !== 'admin') {
+  const hasAdminAccess =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.subscriptionTier === 'admin';
+
+  if (requireAdmin && !hasAdminAccess) {
     return <Navigate to="/dashboard/analysis" replace state={{ from: location }} />;
   }
 

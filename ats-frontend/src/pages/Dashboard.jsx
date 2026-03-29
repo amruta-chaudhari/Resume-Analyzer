@@ -14,6 +14,10 @@ const Dashboard = () => {
   const [sessionWarning, setSessionWarning] = useState('');
   const { clearAuth, updateUser, refreshToken, hasHydrated, user } = useAuthStore();
   const location = useLocation();
+  const hasAdminAccess =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.subscriptionTier === 'admin';
 
   // Model Parameters state
   const [modelParameters, setModelParameters] = useState({
@@ -222,7 +226,7 @@ const Dashboard = () => {
                 Logout
               </button>
             </div>
-            {user?.subscriptionTier === 'admin' && (
+            {hasAdminAccess && (
               <div className="mt-4 flex justify-center">
                 <Link
                   to="/admin"
