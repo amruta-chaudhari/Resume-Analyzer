@@ -48,14 +48,50 @@ const parseAllowedModels = (value: string | null | undefined): string[] => {
             return [];
         }
 
-        return parsed
+        const normalized = parsed
             .filter((item): item is string => typeof item === 'string')
             .map((item) => item.trim())
             .filter(Boolean);
+
+        const denyAllOnly = normalized.length === 1 && normalized[0] === '__none__';
+        if (denyAllOnly) {
+            return ['__none__'];
+        }
+
+        return normalized.filter((item) => item !== '__none__');
     } catch {
         return [];
     }
 };
+
+const getModelIdAliases = (value: string | null | undefined): string[] => {
+    if (!value) {
+        return [];
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+        return [];
+    }
+
+    const aliases = new Set([normalized]);
+    if (normalized.includes('/')) {
+        aliases.add(normalized.split('/').pop() || normalized);
+    }
+    if (normalized.includes(':')) {
+        aliases.add(normalized.split(':')[0]);
+    }
+
+    return Array.from(aliases);
+};
+
+const modelIdMatches = (candidateId: string, requestedId: string) => {
+    const candidateAliases = getModelIdAliases(candidateId);
+    const requestedAliases = new Set(getModelIdAliases(requestedId));
+    return candidateAliases.some((alias) => requestedAliases.has(alias));
+};
+
+const listIncludesModel = (list: string[], modelId: string) => list.some((item) => modelIdMatches(modelId, item));
 
 const estimateCostFromPricingMap = (
     modelPricingRaw: string | null | undefined,
@@ -174,12 +210,12 @@ const parseActiveProviderList = (value: string | null | undefined): AiProviderId
 const createDefaultModel = (): AIModel => ({
     id: DEFAULT_MODEL,
     name: 'GPT-5.4 Mini',
-    provider: 'OpenAI',
+    provider: 'openrouter',
     context_length: 128000,
     supportsVision: true,
     supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
     created: Math.floor(Date.now() / 1000),
-    description: 'Fast, affordable, modern model defaulting for ATS requests.',
+    description: 'Fast, affordable OpenRouter-routed fallback model for ATS requests.',
     recommended: true,
     architecture: {
         modality: 'text+image',
@@ -442,35 +478,55 @@ export class AIService {
             candidates = candidates.filter((model) => model.supportsVision);
         }
 
+        const executableCandidates = [...candidates];
+        const globalDenyAll = globallyAllowedModels.length === 1 && globallyAllowedModels[0] === '__none__';
+        const policyDenyAll = Boolean(policy?.allowedModels && policy.allowedModels.length === 1 && policy.allowedModels[0] === '__none__');
+
         if (globallyAllowedModels.length > 0) {
-            candidates = candidates.filter((model) => globallyAllowedModels.includes(model.id));
+            candidates = candidates.filter((model) => listIncludesModel(globallyAllowedModels, model.id));
         }
 
         if (policy?.allowedModels && policy.allowedModels.length > 0) {
-            candidates = candidates.filter((model) => policy!.allowedModels!.includes(model.id));
+            candidates = candidates.filter((model) => listIncludesModel(policy!.allowedModels!, model.id));
         }
 
         const policyFilteredCandidates = [...candidates];
         if (selectedModelId) {
-            if (globallyAllowedModels.length > 0 && !globallyAllowedModels.includes(selectedModelId)) {
+            if (globalDenyAll) {
+                throw new Error('All AI models are currently disabled by admin policy');
+            }
+
+            if (globallyAllowedModels.length > 0 && !listIncludesModel(globallyAllowedModels, selectedModelId)) {
                 throw new Error('Selected model is not allowed by admin policy');
             }
 
-            if (policy?.allowedModels && policy.allowedModels.length > 0 && !policy.allowedModels.includes(selectedModelId)) {
+            if (policyDenyAll) {
+                throw new Error('All AI models are disabled for your plan');
+            }
+
+            if (policy?.allowedModels && policy.allowedModels.length > 0 && !listIncludesModel(policy.allowedModels, selectedModelId)) {
                 throw new Error('Selected model is not available for your plan');
             }
 
-            const selectedCandidates = candidates.filter((model) => model.id === selectedModelId);
+            const selectedCandidates = candidates.filter((model) => modelIdMatches(model.id, selectedModelId));
             if (selectedCandidates.length > 0) {
                 candidates = selectedCandidates;
             }
         }
 
         if (candidates.length === 0) {
+            const canFallbackFromAllowlistMismatch =
+                executableCandidates.length > 0 &&
+                !globalDenyAll &&
+                !policyDenyAll &&
+                !(policy?.allowedModels && policy.allowedModels.length > 0);
+
             if (selectedModelId && policyFilteredCandidates.length > 0) {
                 candidates = policyFilteredCandidates;
+            } else if (canFallbackFromAllowlistMismatch) {
+                candidates = executableCandidates;
             } else {
-            throw new Error('No AI models are available for the current provider and policy configuration');
+                throw new Error('No AI models are available for the current provider and policy configuration');
             }
         }
 
@@ -907,15 +963,27 @@ ${jobDescription}
                 }
 
                 // 1. Filter by Admin's Allowed Models selection (unless skipped for admin view)
+                let denyAllByConfig = false;
                 if (settings.allowedModels && !skipFilter) {
                     try {
-                        const allowedIds = JSON.parse(settings.allowedModels);
-                        if (Array.isArray(allowedIds) && allowedIds.length > 0) {
-                            availableModels = availableModels.filter(m => allowedIds.includes(m.id));
+                        const allowedIds = parseAllowedModels(settings.allowedModels);
+                        if (allowedIds.length === 1 && allowedIds[0] === '__none__') {
+                            denyAllByConfig = true;
+                            availableModels = [];
+                        } else if (allowedIds.length > 0) {
+                            availableModels = availableModels.filter(m => listIncludesModel(allowedIds, m.id));
                         }
                     } catch (e) {
                         console.error('Failed to parse allowedModels setting', e);
                     }
+                }
+
+                if (
+                    availableModels.length === 0 &&
+                    !denyAllByConfig &&
+                    (provider.includes('openrouter') || provider === 'multiple')
+                ) {
+                    availableModels = [createDefaultModel()];
                 }
 
                 // 2. Override with Admin's Custom Pricing
