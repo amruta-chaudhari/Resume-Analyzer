@@ -350,7 +350,7 @@ export interface ModelCache {
 // User Types
 // ========================================
 
-export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+export type UserRole = 'USER' | 'ADMIN';
 
 export interface UserData {
   id: string;

@@ -53,7 +53,7 @@ export function createRateLimitMiddleware(limitKey: RateLimitKey) {
         return res.status(401).json({ error: 'User not found' });
       }
 
-      if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      if (user.role === 'ADMIN') {
         return next();
       }
 

@@ -24,7 +24,6 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
 
   const hasAdminAccess =
     user?.role === 'ADMIN' ||
-    user?.role === 'SUPER_ADMIN' ||
     user?.subscriptionTier === 'admin';
 
   if (requireAdmin && !hasAdminAccess) {

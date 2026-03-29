@@ -16,7 +16,6 @@ const Dashboard = () => {
   const location = useLocation();
   const hasAdminAccess =
     user?.role === 'ADMIN' ||
-    user?.role === 'SUPER_ADMIN' ||
     user?.subscriptionTier === 'admin';
 
   // Model Parameters state

@@ -157,7 +157,7 @@ const enforceLlmPolicy = async (params: {
     throw new Error('User not found');
   }
 
-  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+  if (user.role === 'ADMIN') {
     return;
   }
 

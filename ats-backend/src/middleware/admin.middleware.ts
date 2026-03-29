@@ -12,12 +12,8 @@ export interface AdminRequest extends AuthRequest {
   };
 }
 
-export const hasAdminRole = (role?: UserRole | null): boolean => role === 'ADMIN' || role === 'SUPER_ADMIN';
-
-export const hasSuperAdminRole = (role?: UserRole | null): boolean => role === 'SUPER_ADMIN';
-
-export const requireRole = (minimumRole: UserRole = 'ADMIN') => {
-  const checkFn = minimumRole === 'SUPER_ADMIN' ? hasSuperAdminRole : hasAdminRole;
+export const hasAdminRole = (role?: UserRole | null): boolean => role === 'ADMIN';
+export const requireRole = (_minimumRole: UserRole = 'ADMIN') => {
 
   return async (req: AdminRequest, res: Response, next: NextFunction) => {
     try {
@@ -40,9 +36,8 @@ export const requireRole = (minimumRole: UserRole = 'ADMIN') => {
         return res.status(401).json({ error: 'User not found' });
       }
 
-      if (!checkFn(user.role)) {
-        const message = minimumRole === 'SUPER_ADMIN' ? 'Super admin access required' : 'Admin access required';
-        return res.status(403).json({ error: message });
+      if (!hasAdminRole(user.role)) {
+        return res.status(403).json({ error: 'Admin access required' });
       }
 
       req.adminUser = {

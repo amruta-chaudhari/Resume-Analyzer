@@ -7,7 +7,7 @@ import { AppError } from '../utils/errors';
 
 const router: Router = Router();
 const adminService = new AdminService();
-const USER_ROLES = ['USER', 'ADMIN', 'SUPER_ADMIN'];
+const USER_ROLES = ['USER', 'ADMIN'];
 
 const sendAdminError = (res: Response, error: unknown, fallbackMessage: string) => {
   if (error instanceof AppError) {

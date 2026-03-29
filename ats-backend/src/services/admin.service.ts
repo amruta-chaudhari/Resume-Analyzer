@@ -36,7 +36,7 @@ type UpdateUserInput = {
   llmAllowedModels?: string | null;
 };
 
-const USER_ROLES: UserRole[] = ['USER', 'ADMIN', 'SUPER_ADMIN'];
+const USER_ROLES: UserRole[] = ['USER', 'ADMIN'];
 
 const isUserRole = (value: unknown): value is UserRole =>
   typeof value === 'string' && USER_ROLES.includes(value as UserRole);
@@ -345,22 +345,7 @@ export class AdminService {
     const sanitizedInput = this.normalizeUpdateInput(input);
 
     return this.runTransaction(async (tx) => {
-      const actor = await tx.user.findUnique({
-        where: { id: auditContext.actorUserId },
-        select: { id: true, role: true },
-      });
-
-      if (!actor) {
-        throw new NotFoundError('Actor user', auditContext.actorUserId);
-      }
-
       const existingUser = await this.requireUser(tx, userId);
-
-      const isSuperAdminAction =
-        existingUser.role === 'SUPER_ADMIN' || sanitizedInput.role === 'SUPER_ADMIN';
-      if (isSuperAdminAction && actor.role !== 'SUPER_ADMIN') {
-        throw new Error('Only super admins can manage super admin role');
-      }
 
       const nextData = this.buildUserUpdateData(existingUser, sanitizedInput);
 
