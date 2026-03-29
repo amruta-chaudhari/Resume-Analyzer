@@ -67,6 +67,40 @@ const SystemSettingsPanel = () => {
     }
   };
 
+  const handleProviderToggle = (providerId) => {
+    let currentArgs = settings.activeAiProvider ? settings.activeAiProvider.split(',') : [];
+    
+    // Check if it's currently selected
+    const isSelected = currentArgs.includes(providerId);
+    
+    // Check if selecting "multiple" which means combining all (though not explicitly needed now, we can remove multiple later)
+    if (providerId === 'multiple') {
+      handleChange('activeAiProvider', isSelected ? 'openrouter' : 'multiple');
+      return;
+    }
+    
+    // Handle specific selections
+    if (isSelected) {
+      currentArgs = currentArgs.filter(p => p !== providerId && p !== 'multiple');
+    } else {
+      // Remove 'multiple' if they explicitly toggle individual ones to prevent confusion
+      currentArgs = currentArgs.filter(p => p !== 'multiple');
+      currentArgs.push(providerId);
+    }
+    
+    // Fallback if empty
+    if (currentArgs.length === 0) currentArgs = ['openrouter'];
+    
+    handleChange('activeAiProvider', currentArgs.join(','));
+  };
+
+  const providerOptions = [
+    { id: 'openrouter', label: 'OpenRouter' },
+    { id: 'openai', label: 'OpenAI' },
+    { id: 'gemini', label: 'Google Gemini' },
+    { id: 'anthropic', label: 'Anthropic Claude' }
+  ];
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -122,20 +156,29 @@ const SystemSettingsPanel = () => {
       )}
 
       <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-          Active AI Provider
-          <select
-            value={settings.activeAiProvider}
-            onChange={(e) => handleChange('activeAiProvider', e.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/20 bg-white/70 px-4 py-3 text-gray-900 outline-none transition focus:border-cyan-400 dark:bg-slate-900/60 dark:text-white"
-          >
-            <option value="openrouter">OpenRouter (Recommended, supports multiple APIs natively)</option>
-            <option value="openai">OpenAI (Direct API)</option>
-            <option value="gemini">Google AI Studio (Gemini Direct API)</option>
-            <option value="anthropic">Anthropic (Claude Direct API)</option>
-            <option value="multiple">Combine Direct APIs (OpenAI + Gemini + Anthropic)</option>
-          </select>
-        </label>
+        <div className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+          <span className="mb-2 block">Active AI Providers (Multi-Select)</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            {providerOptions.map(option => {
+               const isChecked = settings.activeAiProvider === 'multiple' || (settings.activeAiProvider && settings.activeAiProvider.split(',').includes(option.id));
+               return (
+                 <label key={option.id} className="flex items-center space-x-3 cursor-pointer p-3 rounded-2xl border border-white/20 bg-white/70 hover:bg-white transition-colors dark:bg-slate-900/60 dark:hover:bg-slate-800">
+                   <div className="relative flex items-center">
+                     <input
+                       type="checkbox"
+                       checked={isChecked}
+                       onChange={() => handleProviderToggle(option.id)}
+                       className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-600 dark:border-gray-600 dark:bg-slate-700 transition"
+                     />
+                   </div>
+                   <span className="text-gray-900 dark:text-white font-medium select-none text-sm">
+                     {option.label}
+                   </span>
+                 </label>
+               );
+             })}
+          </div>
+        </div>
 
         <div className="space-y-4">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">

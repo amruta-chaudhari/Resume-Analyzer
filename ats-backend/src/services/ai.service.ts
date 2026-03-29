@@ -127,7 +127,7 @@ export class AIService {
 
                 let allFetchedModels: AIModel[] = [];
 
-                if (provider === 'anthropic' || provider === 'multiple') {
+                if (provider.includes('anthropic') || provider === 'multiple') {
                     const apiKey = settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '';
                     if (apiKey) {
                         try {
@@ -169,12 +169,12 @@ export class AIService {
                                 created: Math.floor(now/1000), description: 'Most intelligent model'
                             });
                         }
-                    } else if (provider === 'anthropic') {
+                    } else if (provider.includes('anthropic') && !provider.includes(',')) {
                         throw new Error('Anthropic API key not configured');
                     }
                 }
                 
-                if (provider === 'gemini' || provider === 'multiple') {
+                if (provider.includes('gemini') || provider === 'multiple') {
                     const apiKey = settings.geminiKey || process.env.GEMINI_API_KEY || '';
                     if (apiKey) {
                         try {
@@ -211,12 +211,12 @@ export class AIService {
                                 created: Math.floor(now/1000), description: 'Most capable model'
                             });
                         }
-                    } else if (provider === 'gemini') {
+                    } else if (provider.includes('gemini') && !provider.includes(',')) {
                         throw new Error('Gemini API key not configured');
                     }
                 }
                 
-                if (provider === 'openai' || provider === 'multiple') {
+                if (provider.includes('openai') || provider === 'multiple') {
                     const apiKey = settings.openAiKey || process.env.OPENAI_API_KEY || '';
                     if (apiKey) {
                         try {
@@ -276,12 +276,12 @@ export class AIService {
                                  created: Math.floor(now/1000), description: 'Most advanced model'
                             });
                         }
-                    } else if (provider === 'openai') {
+                    } else if (provider.includes('openai') && !provider.includes(',')) {
                         throw new Error('OpenAI API key not configured');
                     }
                 }
 
-                if (provider === 'openrouter') {
+                if (provider.includes('openrouter') || provider === 'multiple') {
                     try {
                         const response = await axios.get('https://openrouter.ai/api/v1/models');
                         const fetchedModels: AIModel[] = response.data.data
@@ -308,7 +308,7 @@ export class AIService {
                 
                 let availableModels = allFetchedModels;
 
-                if (provider === 'openrouter' && !availableModels.some((model) => model.id === DEFAULT_MODEL)) {
+                if ((provider.includes('openrouter') || provider === 'multiple') && !availableModels.some((model) => model.id === DEFAULT_MODEL)) {
                     availableModels = [createDefaultModel(), ...availableModels];
                 }
 
