@@ -235,6 +235,30 @@ const SystemSettingsPanel = () => {
             Enable or disable specific models and override their pricing. Note that enabling 0 models implies ALL are enabled by default.
             Pricing overrides are calculated per 1 Million Tokens ($).
           </p>
+
+          <div className="flex space-x-3 mb-4">
+            <button
+              type="button"
+              onClick={() => setAllowedModels([])}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-cyan-500 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-400 dark:text-cyan-300 dark:hover:bg-cyan-900/30 transition shadow-sm"
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllowedModels(['__none__'])}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-400 text-red-600 hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-900/30 transition shadow-sm"
+            >
+              Select None
+            </button>
+            <button
+              type="button"
+              onClick={() => setModelPricing({})}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-400 text-gray-700 hover:bg-gray-50 dark:border-gray-500 dark:text-gray-300 dark:hover:bg-gray-800 transition shadow-sm"
+            >
+              Reset Pricing (Default)
+            </button>
+          </div>
           
           <div className="bg-white/50 dark:bg-slate-900/60 rounded-xl overflow-hidden border border-white/20">
             {modelsData.length === 0 ? (
