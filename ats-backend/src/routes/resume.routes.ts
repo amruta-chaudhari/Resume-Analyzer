@@ -51,6 +51,21 @@ const parseModelParameters = (body: any): ModelParameters => {
   };
 };
 
+const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
+
+const normalizeModelIdentifier = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || !SUPPORTED_MODEL_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
 const normalizeResumeUpdatePayload = (body: any): ResumeUpdateRequestBody => {
   const allowedKeys = ['title', 'content', 'templateId', 'structuredData'];
   const incomingKeys = Object.keys(body || {});
@@ -462,7 +477,7 @@ router.get('/:id/export/word', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/resumes/parse
-router.post('/parse', async (req: AuthRequest, res: Response) => {
+router.post('/parse', analysesPerDayLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body as ResumesParseRequestBody;
     const { text } = body;
@@ -482,7 +497,11 @@ router.post('/parse', async (req: AuthRequest, res: Response) => {
 router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body as ResumeAnalyzeRequestBody;
-    const { selectedModel } = body;
+    const selectedModel = normalizeModelIdentifier(body.selectedModel);
+
+    if (body.selectedModel && !selectedModel) {
+      return res.status(400).json({ error: 'Invalid model selection' });
+    }
 
     const normalizedJobDescription = typeof body.jobDescription === 'string'
       ? sanitizeJobDescription(body.jobDescription)
@@ -519,8 +538,9 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     const analysisResult = await aiService.analyzeResume(
       resumeText,
       normalizedJobDescription.trim(),
-      selectedModel,
-      modelParameters
+      selectedModel || undefined,
+      modelParameters,
+      { userId: req.userId!, feature: 'stored_resume_analysis' }
     );
 
     const savedData = await prisma.$transaction(async (tx: any) => {
@@ -562,6 +582,9 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
           completedAt: new Date(),
           processingTimeMs: (analysisResult as AnalysisResult).processingTime || null,
           tokensUsed: (analysisResult as AnalysisResult).tokensUsed || null,
+          promptTokens: (analysisResult as AnalysisResult).promptTokens || null,
+          completionTokens: (analysisResult as AnalysisResult).completionTokens || null,
+          estimatedCost: (analysisResult as AnalysisResult).estimatedCost || null,
         },
       });
 
@@ -579,7 +602,8 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to analyze resume';
-    res.status(500).json({ error: message });
+    const statusCode = /limit|budget|allowed|not enabled/i.test(message) ? 403 : 500;
+    res.status(statusCode).json({ error: statusCode === 500 ? 'Failed to analyze resume' : message });
   }
 });
 

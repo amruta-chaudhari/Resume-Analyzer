@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import axios from 'axios';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import prisma from '../lib/prisma';
 import { systemSettingsService } from './system-settings.service';
 import type {
   AIModel,
@@ -13,6 +14,73 @@ import type {
   OpenAICompletion,
   HealthCheckResponse,
 } from '../types/index';
+
+const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
+
+const normalizeModelIdentifier = (value: unknown): string | null => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || !SUPPORTED_MODEL_PATTERN.test(trimmed)) {
+        return null;
+    }
+
+    return trimmed;
+};
+
+const parseAllowedModels = (value: string | null | undefined): string[] => {
+    if (!value) {
+        return [];
+    }
+
+    try {
+        const parsed = JSON.parse(value);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        return parsed
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+};
+
+const estimateCostFromPricingMap = (
+    modelPricingRaw: string | null | undefined,
+    modelId: string,
+    promptTokens: number,
+    completionTokens: number
+): number | null => {
+    if (!modelPricingRaw) {
+        return null;
+    }
+
+    try {
+        const pricingMap = JSON.parse(modelPricingRaw) as Record<string, { prompt?: string | number; completion?: string | number }>;
+        const pricing = pricingMap[modelId];
+        if (!pricing) {
+            return null;
+        }
+
+        const promptRate = Number(pricing.prompt ?? 0);
+        const completionRate = Number(pricing.completion ?? 0);
+
+        if (!Number.isFinite(promptRate) || !Number.isFinite(completionRate) || promptRate < 0 || completionRate < 0) {
+            return null;
+        }
+
+        return (promptTokens * promptRate) + (completionTokens * completionRate);
+    } catch {
+        return null;
+    }
+};
+
+const clampModelInputText = (text: string, maxChars: number) => text.length > maxChars ? text.slice(0, maxChars) : text;
 
 // Model cache with 24-hour expiration
 let modelCache: ModelCache = {
@@ -388,28 +456,33 @@ export class AIService {
     }
 
     async analyzeResume(
-        text: string, 
-        jobDescription: string, 
+        text: string,
+        jobDescription: string,
         selectedModel?: string,
-        modelParameters?: ModelParameters
+        modelParameters?: ModelParameters,
+        usageContext?: { userId?: string; feature?: string }
     ): Promise<AnalysisResult> {
+        const startedAt = Date.now();
+        const safeResumeText = clampModelInputText(text || '', 60000);
+        const safeJobDescription = clampModelInputText(jobDescription || '', 30000);
+
         // Pre-analyze formatting issues
-        const formattingAnalysis = this.analyzeFormattingIssues(text);
+        const formattingAnalysis = this.analyzeFormattingIssues(safeResumeText);
 
         const prompt = `You are an expert ATS (Applicant Tracking System) analyzer, specializing in providing feedback for university students in technical fields. Analyze the following resume against the job description and provide a detailed assessment based on career advising best practices.
 
 
 Resume Text:
-${text}
+${safeResumeText}
 
 
 Job Description:
-${jobDescription}
+${safeJobDescription}
 
 
 Additional Formatting Analysis:
-${formattingAnalysis.detectedIssues.length > 0 ? 
-    `Pre-detected potential formatting issues: ${formattingAnalysis.detectedIssues.join(', ')}` : 
+${formattingAnalysis.detectedIssues.length > 0 ?
+    `Pre-detected potential formatting issues: ${formattingAnalysis.detectedIssues.join(', ')}` :
     'No obvious formatting issues detected in initial text analysis.'}
 
 Please provide a comprehensive analysis in the following JSON format:
@@ -495,41 +568,87 @@ Focus on these rules:
 Be thorough but concise. Provide specific examples and actionable advice based on the rules above. Keep formatting exactly as JSON.
 `;
 
+        const normalizedMaxTokens = Number.isFinite(Number(modelParameters?.max_tokens))
+            ? Math.min(Math.max(Number(modelParameters?.max_tokens), 500), 16000)
+            : 4000;
+        const normalizedTemperature = Number.isFinite(Number(modelParameters?.temperature))
+            ? Math.min(Math.max(Number(modelParameters?.temperature), 0), 2)
+            : 0.15;
+
+        let provider = 'openrouter';
+        let finalModel = 'default';
+        let promptTokens: number | null = null;
+        let completionTokens: number | null = null;
+        let totalTokens: number | null = null;
+        let estimatedCostUsd: number | null = null;
+
         try {
             const settings = await systemSettingsService.getSettings();
-            const provider = settings.activeAiProvider || 'openrouter';
+            provider = settings.activeAiProvider || 'openrouter';
+            const allowedModels = parseAllowedModels(settings.allowedModels);
+
+            const selectedModelId = normalizeModelIdentifier(selectedModel);
             let responseText = '';
-            let finalModel = selectedModel || 'default';
 
             if (provider === 'anthropic') {
-                finalModel = selectedModel || 'claude-3-haiku-20240307';
+                finalModel = selectedModelId || 'claude-3-haiku-20240307';
+                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
+                    throw new Error('Selected model is not allowed by admin policy');
+                }
                 const anthropic = new Anthropic({ apiKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '' });
                 const completion = await anthropic.messages.create({
                     model: finalModel,
-                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 4096),
-                    temperature: modelParameters?.temperature ?? 0.15,
+                    max_tokens: Math.min(normalizedMaxTokens, 4096),
+                    temperature: normalizedTemperature,
                     messages: [{ role: 'user', content: prompt }]
                 });
-                responseText = completion.content[0].type === 'text' ? completion.content[0].text : '';
+                responseText = completion.content[0]?.type === 'text' ? completion.content[0].text : '';
+                const usage = (completion as any)?.usage;
+                promptTokens = Number(usage?.input_tokens || 0) || null;
+                completionTokens = Number(usage?.output_tokens || 0) || null;
+                totalTokens = Number(usage?.input_tokens || 0) + Number(usage?.output_tokens || 0) || null;
             } else if (provider === 'gemini') {
-                finalModel = selectedModel || 'gemini-1.5-flash';
+                finalModel = selectedModelId || 'gemini-1.5-flash';
+                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
+                    throw new Error('Selected model is not allowed by admin policy');
+                }
                 const genAI = new GoogleGenerativeAI(settings.geminiKey || process.env.GEMINI_API_KEY || '');
-                const genModel = genAI.getGenerativeModel({ model: finalModel });
+                const genModel = genAI.getGenerativeModel({
+                    model: finalModel,
+                    generationConfig: {
+                        temperature: normalizedTemperature,
+                        maxOutputTokens: Math.min(normalizedMaxTokens, 8192),
+                    } as any,
+                });
                 const result = await genModel.generateContent(prompt);
                 responseText = result.response.text();
+                const usage = (result as any)?.response?.usageMetadata || (result as any)?.usageMetadata;
+                promptTokens = Number(usage?.promptTokenCount || usage?.inputTokens || 0) || null;
+                completionTokens = Number(usage?.candidatesTokenCount || usage?.outputTokens || 0) || null;
+                totalTokens = Number(usage?.totalTokenCount || 0) || null;
             } else if (provider === 'openai') {
-                finalModel = selectedModel || 'gpt-3.5-turbo';
+                finalModel = selectedModelId || 'gpt-3.5-turbo';
+                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
+                    throw new Error('Selected model is not allowed by admin policy');
+                }
                 const openai = new OpenAI({ apiKey: settings.openAiKey || process.env.OPENAI_API_KEY || '' });
                 const completion = await openai.chat.completions.create({
                     model: finalModel,
-                    temperature: modelParameters?.temperature ?? 0.15,
-                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 4096),
+                    temperature: normalizedTemperature,
+                    max_tokens: Math.min(normalizedMaxTokens, 4096),
                     messages: [{ role: 'user', content: prompt }]
                 });
                 responseText = completion.choices[0]?.message?.content || '';
+                const usage = (completion as any)?.usage;
+                promptTokens = Number(usage?.prompt_tokens || 0) || null;
+                completionTokens = Number(usage?.completion_tokens || 0) || null;
+                totalTokens = Number(usage?.total_tokens || 0) || null;
             } else {
                 // OpenRouter
-                finalModel = selectedModel || DEFAULT_MODEL;
+                finalModel = selectedModelId || DEFAULT_MODEL;
+                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
+                    throw new Error('Selected model is not allowed by admin policy');
+                }
                 const openrouter = new OpenAI({
                     apiKey: settings.openRouterKey || process.env.OPENROUTER_API_KEY || '',
                     baseURL: 'https://openrouter.ai/api/v1',
@@ -537,8 +656,8 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 const completionParams: CompletionParameters = {
                     model: finalModel,
                     messages: [{ role: 'user', content: prompt }],
-                    temperature: modelParameters?.temperature ?? 0.15,
-                    max_tokens: Math.min(modelParameters?.max_tokens ?? 4000, 16000),
+                    temperature: normalizedTemperature,
+                    max_tokens: Math.min(normalizedMaxTokens, 16000),
                     seed: 42,
                 };
                 if (modelParameters?.include_reasoning) {
@@ -546,6 +665,10 @@ Be thorough but concise. Provide specific examples and actionable advice based o
                 }
                 const completion = await openrouter.chat.completions.create(completionParams as any);
                 responseText = (completion as OpenAICompletion).choices[0]?.message?.content || '';
+                const usage = (completion as any)?.usage;
+                promptTokens = Number(usage?.prompt_tokens || 0) || null;
+                completionTokens = Number(usage?.completion_tokens || 0) || null;
+                totalTokens = Number(usage?.total_tokens || 0) || null;
             }
 
             if (!responseText) {
@@ -567,28 +690,95 @@ Be thorough but concise. Provide specific examples and actionable advice based o
             if (analysisResult.overallScore == null || !analysisResult.skillsAnalysis || !analysisResult.formattingScore) {
                 throw new Error('Invalid response format from AI model');
             }
-            
+
+            if (promptTokens == null) {
+                promptTokens = Math.max(1, Math.ceil((safeResumeText.length + safeJobDescription.length) / 4));
+            }
+
+            if (completionTokens == null) {
+                completionTokens = Math.max(1, Math.ceil(responseText.length / 4));
+            }
+
+            if (totalTokens == null) {
+                totalTokens = promptTokens + completionTokens;
+            }
+
+            estimatedCostUsd = estimateCostFromPricingMap(
+                settings.modelPricing,
+                finalModel,
+                promptTokens,
+                completionTokens
+            );
+
+            const processingTimeMs = Date.now() - startedAt;
+
             // Set the model used metadata
             analysisResult.modelUsed = {
                 id: finalModel,
                 name: finalModel,
-                provider: provider
+                provider,
             };
+            analysisResult.processingTime = processingTimeMs;
+            analysisResult.promptTokens = promptTokens;
+            analysisResult.completionTokens = completionTokens;
+            analysisResult.tokensUsed = totalTokens;
+            analysisResult.estimatedCost = estimatedCostUsd != null ? estimatedCostUsd.toFixed(6) : undefined;
+
+            if (usageContext?.userId) {
+                await prisma.aiUsage.create({
+                    data: {
+                        userId: usageContext.userId,
+                        feature: usageContext.feature || 'resume_analysis',
+                        aiProvider: provider,
+                        model: finalModel,
+                        tokensUsed: totalTokens,
+                        promptTokens,
+                        completionTokens,
+                        estimatedCost: analysisResult.estimatedCost || null,
+                        costUsd: estimatedCostUsd,
+                        requestSummary: `resumeChars=${safeResumeText.length};jobChars=${safeJobDescription.length}`,
+                        responseSummary: `overallScore=${analysisResult.overallScore}`,
+                        responseTimeMs: processingTimeMs,
+                        status: 'completed',
+                    } as any,
+                }).catch(() => undefined);
+            }
 
             return analysisResult;
 
         } catch (error) {
             console.error('AI Analysis error:', error);
+
+            if (usageContext?.userId) {
+                await prisma.aiUsage.create({
+                    data: {
+                        userId: usageContext.userId,
+                        feature: usageContext.feature || 'resume_analysis',
+                        aiProvider: provider,
+                        model: finalModel,
+                        estimatedCost: estimatedCostUsd != null ? estimatedCostUsd.toFixed(6) : null,
+                        costUsd: estimatedCostUsd,
+                        responseTimeMs: Date.now() - startedAt,
+                        status: 'failed',
+                        details: error instanceof Error ? error.message : 'Unknown AI analysis error',
+                    } as any,
+                }).catch(() => undefined);
+            }
+
             const status = typeof error === 'object' && error !== null && 'status' in error
                 ? Number((error as { status?: number }).status)
                 : undefined;
 
             if (status === 401 || status === 403) {
-                throw new Error('AI provider authentication failed. Check API Keys and provider access.');
+                throw new Error('AI provider authentication failed. Check API keys and provider access.');
             }
 
             if (status === 429) {
                 throw new Error('AI provider rate limit reached. Please retry shortly.');
+            }
+
+            if (error instanceof Error && error.message.includes('allowed by admin policy')) {
+                throw error;
             }
 
             throw new Error(`AI analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

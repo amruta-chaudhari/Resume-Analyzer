@@ -59,7 +59,8 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
         text,
         jobDescription,
         selectedModel,
-        modelParameters
+        modelParameters,
+        { userId, feature: 'async_resume_analysis' }
       );
 
       job.progress(60);
@@ -141,7 +142,10 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
             status: 'completed',
             completedAt: new Date(),
             processingTimeMs: analysisResult.processingTime || null,
-            tokensUsed: analysisResult.tokensUsed || null
+            tokensUsed: analysisResult.tokensUsed || null,
+            promptTokens: analysisResult.promptTokens || null,
+            completionTokens: analysisResult.completionTokens || null,
+            estimatedCost: analysisResult.estimatedCost || null,
           }
         });
 

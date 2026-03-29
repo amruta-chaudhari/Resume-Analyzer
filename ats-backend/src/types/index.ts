@@ -156,6 +156,9 @@ export interface AnalysisResult {
   modelUsed: ModelUsed;
   processingTime?: number;
   tokensUsed?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  estimatedCost?: string;
 }
 
 export interface AnalysisInput {
@@ -347,17 +350,21 @@ export interface ModelCache {
 // User Types
 // ========================================
 
+export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+
 export interface UserData {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
   subscriptionTier: string;
+  role: UserRole;
 }
 
 export interface TokenPayload {
   userId: string;
   email: string;
+  role?: UserRole;
 }
 
 // ========================================

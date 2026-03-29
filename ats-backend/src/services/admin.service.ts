@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import { ConflictError, NotFoundError } from '../utils/errors';
 import { Logger } from '../utils/logger';
 import { sanitizeEmail, sanitizeString } from '../utils/sanitizer';
+import type { UserRole } from '../types';
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
@@ -26,8 +27,56 @@ type UpdateUserInput = {
   lastName?: string | null;
   phone?: string | null;
   subscriptionTier?: string;
+  role?: UserRole;
   emailVerified?: boolean;
   deleted?: boolean;
+  llmMonthlyBudgetUsd?: number | null;
+  llmMonthlyTokenLimit?: number | null;
+  llmAllowReasoning?: boolean | null;
+  llmAllowedModels?: string | null;
+};
+
+const USER_ROLES: UserRole[] = ['USER', 'ADMIN', 'SUPER_ADMIN'];
+
+const isUserRole = (value: unknown): value is UserRole =>
+  typeof value === 'string' && USER_ROLES.includes(value as UserRole);
+
+const parseNumberOrNull = (value: unknown): number | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('LLM budget and token limits must be non-negative numbers');
+  }
+  return parsed;
+};
+
+const parseStringArrayAsJson = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || value === '') {
+    return null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string' && item.trim().length > 0)) {
+      throw new Error('llmAllowedModels must be a JSON array of model ids');
+    }
+    return JSON.stringify(parsed.map((item) => item.trim()));
+  }
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string' && item.trim().length > 0)) {
+    return JSON.stringify(value.map((item) => item.trim()));
+  }
+  throw new Error('llmAllowedModels must be a JSON array of model ids');
 };
 
 const DEFAULT_PAGE = 1;
@@ -92,6 +141,7 @@ export class AdminService {
           firstName: true,
           lastName: true,
           phone: true,
+          role: true,
           subscriptionTier: true,
           emailVerified: true,
           createdAt: true,
@@ -129,22 +179,27 @@ export class AdminService {
   async getUserDetail(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        subscriptionTier: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-        lastLoginAt: true,
-        deletedAt: true,
-        resumesCreated: true,
-        analysesRunToday: true,
-        lastAnalysisDate: true,
-        aiGenerationsToday: true,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          subscriptionTier: true,
+          emailVerified: true,
+          createdAt: true,
+          updatedAt: true,
+          lastLoginAt: true,
+          deletedAt: true,
+          llmMonthlyBudgetUsd: true,
+          llmMonthlyTokenLimit: true,
+          llmAllowReasoning: true,
+          llmAllowedModels: true,
+          resumesCreated: true,
+          analysesRunToday: true,
+          lastAnalysisDate: true,
+          aiGenerationsToday: true,
         aiOptimizationsToday: true,
         _count: {
           select: {
@@ -290,7 +345,23 @@ export class AdminService {
     const sanitizedInput = this.normalizeUpdateInput(input);
 
     return this.runTransaction(async (tx) => {
+      const actor = await tx.user.findUnique({
+        where: { id: auditContext.actorUserId },
+        select: { id: true, role: true },
+      });
+
+      if (!actor) {
+        throw new NotFoundError('Actor user', auditContext.actorUserId);
+      }
+
       const existingUser = await this.requireUser(tx, userId);
+
+      const isSuperAdminAction =
+        existingUser.role === 'SUPER_ADMIN' || sanitizedInput.role === 'SUPER_ADMIN';
+      if (isSuperAdminAction && actor.role !== 'SUPER_ADMIN') {
+        throw new Error('Only super admins can manage super admin role');
+      }
+
       const nextData = this.buildUserUpdateData(existingUser, sanitizedInput);
 
       if (Object.keys(nextData).length === 0) {
@@ -310,12 +381,17 @@ export class AdminService {
             firstName: true,
             lastName: true,
             phone: true,
+            role: true,
             subscriptionTier: true,
             emailVerified: true,
             createdAt: true,
             updatedAt: true,
             lastLoginAt: true,
             deletedAt: true,
+            llmMonthlyBudgetUsd: true,
+            llmMonthlyTokenLimit: true,
+            llmAllowReasoning: true,
+            llmAllowedModels: true,
           },
         });
 
@@ -457,12 +533,36 @@ export class AdminService {
       normalized.subscriptionTier = sanitizeString(input.subscriptionTier);
     }
 
+    if (input.role !== undefined) {
+      if (!isUserRole(input.role)) {
+        throw new Error('Invalid user role');
+      }
+      normalized.role = input.role;
+    }
+
     if (input.emailVerified !== undefined) {
       normalized.emailVerified = Boolean(input.emailVerified);
     }
 
     if (input.deleted !== undefined) {
       normalized.deleted = Boolean(input.deleted);
+    }
+
+    if (input.llmMonthlyBudgetUsd !== undefined) {
+      normalized.llmMonthlyBudgetUsd = parseNumberOrNull(input.llmMonthlyBudgetUsd) ?? null;
+    }
+
+    if (input.llmMonthlyTokenLimit !== undefined) {
+      const parsed = parseNumberOrNull(input.llmMonthlyTokenLimit);
+      normalized.llmMonthlyTokenLimit = parsed != null ? Math.floor(parsed) : null;
+    }
+
+    if (input.llmAllowReasoning !== undefined) {
+      normalized.llmAllowReasoning = input.llmAllowReasoning == null ? null : Boolean(input.llmAllowReasoning);
+    }
+
+    if (input.llmAllowedModels !== undefined) {
+      normalized.llmAllowedModels = parseStringArrayAsJson(input.llmAllowedModels) ?? null;
     }
 
     return normalized;
@@ -474,9 +574,14 @@ export class AdminService {
       firstName: string | null;
       lastName: string | null;
       phone: string | null;
+      role: UserRole;
       subscriptionTier: string;
       emailVerified: boolean;
       deletedAt: Date | null;
+      llmMonthlyBudgetUsd?: number | null;
+      llmMonthlyTokenLimit?: number | null;
+      llmAllowReasoning?: boolean | null;
+      llmAllowedModels?: string | null;
     },
     input: UpdateUserInput
   ): Prisma.UserUpdateInput {
@@ -512,6 +617,10 @@ export class AdminService {
       nextData.subscriptionTier = input.subscriptionTier;
     }
 
+    if (input.role !== undefined && input.role !== existingUser.role) {
+      nextData.role = input.role;
+    }
+
     if (
       input.emailVerified !== undefined &&
       input.emailVerified !== existingUser.emailVerified
@@ -528,26 +637,59 @@ export class AdminService {
       }
     }
 
+    if (
+      input.llmMonthlyBudgetUsd !== undefined &&
+      input.llmMonthlyBudgetUsd !== existingUser.llmMonthlyBudgetUsd
+    ) {
+      nextData.llmMonthlyBudgetUsd = input.llmMonthlyBudgetUsd;
+    }
+
+    if (
+      input.llmMonthlyTokenLimit !== undefined &&
+      input.llmMonthlyTokenLimit !== existingUser.llmMonthlyTokenLimit
+    ) {
+      nextData.llmMonthlyTokenLimit = input.llmMonthlyTokenLimit;
+    }
+
+    if (
+      input.llmAllowReasoning !== undefined &&
+      input.llmAllowReasoning !== existingUser.llmAllowReasoning
+    ) {
+      nextData.llmAllowReasoning = input.llmAllowReasoning;
+    }
+
+    if (
+      input.llmAllowedModels !== undefined &&
+      input.llmAllowedModels !== existingUser.llmAllowedModels
+    ) {
+      nextData.llmAllowedModels = input.llmAllowedModels;
+    }
+
     return nextData;
   }
 
   private async requireUser(tx: PrismaClientLike, userId: string) {
     const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        subscriptionTier: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-        lastLoginAt: true,
-        deletedAt: true,
-      },
-    });
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          subscriptionTier: true,
+          emailVerified: true,
+          createdAt: true,
+          updatedAt: true,
+          lastLoginAt: true,
+          deletedAt: true,
+          llmMonthlyBudgetUsd: true,
+          llmMonthlyTokenLimit: true,
+          llmAllowReasoning: true,
+          llmAllowedModels: true,
+        },
+      });
 
     if (!user) {
       throw new NotFoundError('User', userId);
@@ -588,9 +730,14 @@ export class AdminService {
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
+    role: UserRole;
     subscriptionTier: string;
     emailVerified: boolean;
     deletedAt: Date | null;
+    llmMonthlyBudgetUsd?: number | null;
+    llmMonthlyTokenLimit?: number | null;
+    llmAllowReasoning?: boolean | null;
+    llmAllowedModels?: string | null;
   }) {
     return {
       id: user.id,
@@ -598,9 +745,14 @@ export class AdminService {
       firstName: user.firstName,
       lastName: user.lastName,
       phone: user.phone,
+      role: user.role,
       subscriptionTier: user.subscriptionTier,
       emailVerified: user.emailVerified,
       deletedAt: user.deletedAt,
+      llmMonthlyBudgetUsd: user.llmMonthlyBudgetUsd,
+      llmMonthlyTokenLimit: user.llmMonthlyTokenLimit,
+      llmAllowReasoning: user.llmAllowReasoning,
+      llmAllowedModels: user.llmAllowedModels,
     };
   }
 
