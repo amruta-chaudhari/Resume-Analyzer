@@ -25,6 +25,9 @@ const parseBooleanFlag = (rawValue: string | undefined): boolean => {
 
 const isRateLimitingDisabled = () => parseBooleanFlag(process.env.DISABLE_RATE_LIMITS);
 
+const hasLegacyAdminTier = (subscriptionTier?: string | null): boolean =>
+  typeof subscriptionTier === 'string' && subscriptionTier.trim().toLowerCase() === 'admin';
+
 /**
  * Create a rate limit middleware for a specific endpoint/feature
  */
@@ -53,7 +56,7 @@ export function createRateLimitMiddleware(limitKey: RateLimitKey) {
         return res.status(401).json({ error: 'User not found' });
       }
 
-      if (user.role === 'ADMIN') {
+      if (user.role === 'ADMIN' || hasLegacyAdminTier(user.subscriptionTier)) {
         return next();
       }
 

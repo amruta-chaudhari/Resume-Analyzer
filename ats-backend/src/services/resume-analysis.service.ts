@@ -46,6 +46,9 @@ const parseAllowedModels = (value: string | null | undefined): string[] => {
   }
 };
 
+const hasLegacyAdminTier = (subscriptionTier?: string | null): boolean =>
+  typeof subscriptionTier === 'string' && subscriptionTier.trim().toLowerCase() === 'admin';
+
 export class ResumeAnalysisService {
   /**
    * Extracts readable text from structured resume data
@@ -94,7 +97,7 @@ export class ResumeAnalysisService {
       throw new Error('Selected model is not available for your plan');
     }
 
-    if ((user as any).role !== 'ADMIN') {
+    if ((user as any).role !== 'ADMIN' && !hasLegacyAdminTier((user as any).subscriptionTier)) {
       const now = new Date();
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
       const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));

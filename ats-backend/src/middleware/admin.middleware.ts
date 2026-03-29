@@ -13,6 +13,9 @@ export interface AdminRequest extends AuthRequest {
 }
 
 export const hasAdminRole = (role?: UserRole | null): boolean => role === 'ADMIN';
+
+const hasLegacyAdminTier = (subscriptionTier?: string | null): boolean =>
+  typeof subscriptionTier === 'string' && subscriptionTier.trim().toLowerCase() === 'admin';
 export const requireRole = (_minimumRole: UserRole = 'ADMIN') => {
 
   return async (req: AdminRequest, res: Response, next: NextFunction) => {
@@ -36,7 +39,7 @@ export const requireRole = (_minimumRole: UserRole = 'ADMIN') => {
         return res.status(401).json({ error: 'User not found' });
       }
 
-      if (!hasAdminRole(user.role)) {
+      if (!hasAdminRole(user.role) && !hasLegacyAdminTier(user.subscriptionTier)) {
         return res.status(403).json({ error: 'Admin access required' });
       }
 

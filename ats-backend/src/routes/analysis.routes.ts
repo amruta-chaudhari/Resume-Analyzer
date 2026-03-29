@@ -87,6 +87,9 @@ const normalizeModelIdentifier = (value: unknown): string | null => {
   return trimmed;
 };
 
+const hasLegacyAdminTier = (subscriptionTier?: string | null): boolean =>
+  typeof subscriptionTier === 'string' && subscriptionTier.trim().toLowerCase() === 'admin';
+
 const estimateInputTokens = (
   resumeText: string,
   jobDescription: string,
@@ -157,7 +160,7 @@ const enforceLlmPolicy = async (params: {
     throw new Error('User not found');
   }
 
-  if (user.role === 'ADMIN') {
+  if (user.role === 'ADMIN' || hasLegacyAdminTier(user.subscriptionTier)) {
     return;
   }
 
