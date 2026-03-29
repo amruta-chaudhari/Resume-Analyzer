@@ -5,6 +5,7 @@ import {
   authRoutes,
   healthRoutes,
   adminRoutes,
+  adminSettingsRoutes,
   resumeRoutes,
   analysisRoutes,
   jobDescriptionsRoutes,
@@ -34,6 +35,7 @@ export const createPlaywrightApp = () => {
   app.use('/api', jobDescriptionsRoutes);
   app.use('/api', healthRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/admin', adminSettingsRoutes);
 
   app.use(express.static(buildDir));
 

@@ -13,6 +13,16 @@ const promoteUserToAdmin = (email: string) => {
   ]);
 };
 
+const setProviderSelection = async (page: import('@playwright/test').Page, selectedProviders: string[]) => {
+  const providers = ['OpenRouter', 'OpenAI', 'Google Gemini', 'Anthropic Claude'];
+
+  for (const providerLabel of providers) {
+    const checkbox = page.locator('label').filter({ hasText: providerLabel }).locator('input[type="checkbox"]');
+    const shouldBeChecked = selectedProviders.includes(providerLabel);
+    await checkbox.setChecked(shouldBeChecked);
+  }
+};
+
 test.describe('Admin Console', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -112,5 +122,39 @@ test.describe('Admin Console', () => {
     await expectDashboardReady(page);
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/dashboard\/analysis$/);
+  });
+
+  test('admin system configuration shows fallback model catalogs for each provider', async ({ page, request, browserName }, testInfo) => {
+    test.skip(browserName !== 'chromium', 'Live admin route check runs once in chromium.');
+
+    const admin = createUniqueAuthUser(testInfo);
+
+    const adminRegister = await request.post('/api/auth/register', { data: admin });
+    expect(adminRegister.ok()).toBeTruthy();
+
+    promoteUserToAdmin(admin.email);
+
+    await page.goto('/login');
+    await page.getByLabel(/^email$/i).fill(admin.email);
+    await page.getByLabel(/^password$/i).fill(admin.password);
+    await page.getByRole('button', { name: /sign in/i }).click();
+
+    await expectDashboardReady(page);
+    await page.getByRole('link', { name: /open admin console/i }).click();
+    await page.getByRole('link', { name: /system configuration/i }).click();
+
+    await expect(page).toHaveURL(/\/admin\/system$/);
+
+    await setProviderSelection(page, ['OpenAI']);
+    await expect(page.getByText('GPT-5.4 Mini')).toBeVisible();
+
+    await setProviderSelection(page, ['Google Gemini']);
+    await expect(page.getByText('Gemini 2.5 Flash')).toBeVisible();
+
+    await setProviderSelection(page, ['Anthropic Claude']);
+    await expect(page.getByText('Claude 4.5 Haiku')).toBeVisible();
+
+    await setProviderSelection(page, ['OpenRouter']);
+    await expect(page.getByText('Free Models Router')).toBeVisible();
   });
 });
