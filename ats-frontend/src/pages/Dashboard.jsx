@@ -228,7 +228,7 @@ const Dashboard = () => {
             {hasAdminAccess && (
               <div className="mt-4 flex justify-center">
                 <Link
-                  to="/admin"
+                  to="/admin/users"
                   className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   Open Admin Console

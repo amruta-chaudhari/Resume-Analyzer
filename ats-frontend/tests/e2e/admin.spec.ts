@@ -58,7 +58,7 @@ test.describe('Admin Console', () => {
     await expectDashboardReady(page);
     await page.getByRole('link', { name: /open admin console/i }).click();
 
-    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole('heading', { name: /user operations/i })).toBeVisible();
 
     await page.getByLabel(/search users/i).fill(target.email);
