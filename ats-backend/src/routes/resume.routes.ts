@@ -548,11 +548,20 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
         return buildResumeVisualInput(buffer, resume.originalFileType || '');
       })
       : null;
+    const executionPlan = await aiService.planAnalysisExecution({
+      userId: req.userId!,
+      selectedModel: selectedModel || undefined,
+      maxTokens: modelParameters.max_completion_tokens ?? modelParameters.max_tokens ?? 4000,
+      resumeText,
+      jobDescription: normalizedJobDescription.trim(),
+      requireVision: Boolean(resumeVisualInput),
+      includeReasoning: Boolean(modelParameters.include_reasoning),
+    });
 
     const analysisResult = await aiService.analyzeResume(
       resumeText,
       normalizedJobDescription.trim(),
-      selectedModel || undefined,
+      executionPlan.modelId,
       modelParameters,
       { userId: req.userId!, feature: 'stored_resume_analysis', resumeVisualInput }
     );

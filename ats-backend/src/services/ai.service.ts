@@ -4,7 +4,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import { systemSettingsService } from './system-settings.service';
+import {
+    systemSettingsService,
+    type AiProviderId,
+} from './system-settings.service';
+import { llmUsageService } from './llm-usage.service';
 import type {
   AIModel,
   ModelCache,
@@ -149,6 +153,24 @@ const inferVisionCapability = (modelId: string, provider: string, modality?: str
     return /vision|vl|multimodal|image|4o|claude|gemini/.test(normalizedId);
 };
 
+const parseActiveProviderList = (value: string | null | undefined): AiProviderId[] => {
+    if (!value) {
+        return ['openrouter'];
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'multiple') {
+        return ['openrouter', 'openai', 'gemini', 'anthropic'];
+    }
+
+    const providers = normalized
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part): part is AiProviderId => ['openrouter', 'openai', 'gemini', 'anthropic'].includes(part));
+
+    return providers.length > 0 ? Array.from(new Set(providers)) : ['openrouter'];
+};
+
 const createDefaultModel = (): AIModel => ({
     id: DEFAULT_MODEL,
     name: 'GPT-5.4 Mini',
@@ -224,6 +246,284 @@ export class AIService {
              created: Math.floor(now/1000), description: 'Fast multimodal fallback catalog entry',
              architecture: { modality: 'text+image' }
         }];
+    }
+
+    private normalizeRuntimeProvider(provider: string | null | undefined, modelId?: string | null): AiProviderId {
+        const normalizedProvider = (provider || '').toLowerCase();
+        if (normalizedProvider.includes('openai')) {
+            return 'openai';
+        }
+        if (normalizedProvider.includes('google') || normalizedProvider.includes('gemini')) {
+            return 'gemini';
+        }
+        if (normalizedProvider.includes('anthropic')) {
+            return 'anthropic';
+        }
+        if (normalizedProvider === 'openrouter') {
+            return 'openrouter';
+        }
+
+        if ((modelId || '').includes('/')) {
+            return 'openrouter';
+        }
+
+        return 'openrouter';
+    }
+
+    private getResolvedProviderCredentials(
+        settings: Awaited<ReturnType<typeof systemSettingsService.getSettings>>,
+        user?: {
+            llmOpenRouterKey?: string | null;
+            llmOpenAiKey?: string | null;
+            llmGeminiKey?: string | null;
+            llmAnthropicKey?: string | null;
+        } | null
+    ) {
+        return {
+            openrouter: {
+                apiKey: user?.llmOpenRouterKey || settings.openRouterKey || process.env.OPENROUTER_API_KEY || null,
+                keySource: user?.llmOpenRouterKey ? 'user' : (settings.openRouterKey ? 'global' : (process.env.OPENROUTER_API_KEY ? 'env' : 'none')),
+            },
+            openai: {
+                apiKey: user?.llmOpenAiKey || settings.openAiKey || process.env.OPENAI_API_KEY || null,
+                keySource: user?.llmOpenAiKey ? 'user' : (settings.openAiKey ? 'global' : (process.env.OPENAI_API_KEY ? 'env' : 'none')),
+            },
+            gemini: {
+                apiKey: user?.llmGeminiKey || settings.geminiKey || process.env.GEMINI_API_KEY || null,
+                keySource: user?.llmGeminiKey ? 'user' : (settings.geminiKey ? 'global' : (process.env.GEMINI_API_KEY ? 'env' : 'none')),
+            },
+            anthropic: {
+                apiKey: user?.llmAnthropicKey || settings.anthropicKey || process.env.ANTHROPIC_API_KEY || null,
+                keySource: user?.llmAnthropicKey ? 'user' : (settings.anthropicKey ? 'global' : (process.env.ANTHROPIC_API_KEY ? 'env' : 'none')),
+            },
+        } as const;
+    }
+
+    private getModelPricing(
+        model: AIModel,
+        modelPricingRaw: string | null | undefined
+    ) {
+        const overrideCost = estimateCostFromPricingMap(modelPricingRaw, model.id, 1, 1);
+        if (overrideCost != null) {
+            const pricingMap = JSON.parse(modelPricingRaw || '{}') as Record<string, { prompt?: string | number; completion?: string | number }>;
+            const pricing = pricingMap[model.id];
+            return {
+                prompt: Number(pricing?.prompt ?? 0),
+                completion: Number(pricing?.completion ?? 0),
+            };
+        }
+
+        return {
+            prompt: Number(model.pricing?.prompt ?? 0),
+            completion: Number(model.pricing?.completion ?? 0),
+        };
+    }
+
+    private estimateModelRequestCost(
+        model: AIModel,
+        modelPricingRaw: string | null | undefined,
+        promptTokens: number,
+        completionTokens: number
+    ) {
+        const pricing = this.getModelPricing(model, modelPricingRaw);
+        if (!Number.isFinite(pricing.prompt) || !Number.isFinite(pricing.completion) || pricing.prompt < 0 || pricing.completion < 0) {
+            return null;
+        }
+
+        return (promptTokens * pricing.prompt) + (completionTokens * pricing.completion);
+    }
+
+    async planAnalysisExecution(params: {
+        userId?: string;
+        selectedModel?: string;
+        maxTokens: number;
+        resumeText: string;
+        resumeFileBytes?: number;
+        jobDescription: string;
+        requireVision?: boolean;
+        includeReasoning?: boolean;
+    }) {
+        const settings = await systemSettingsService.getSettings();
+        const selectedModelId = normalizeModelIdentifier(params.selectedModel);
+        const promptTokensEstimate = Math.max(
+            1,
+            Math.ceil((((params.resumeText || '').length || (params.resumeFileBytes ? Math.ceil(params.resumeFileBytes * 1.5) : 0)) + (params.jobDescription || '').length) / 4)
+        );
+        const projectedCompletionTokens = Math.max(1, params.maxTokens);
+
+        let policy: Awaited<ReturnType<typeof systemSettingsService.getEffectiveLlmPolicy>> | null = null;
+        let usageSummary: Awaited<ReturnType<typeof llmUsageService.getCurrentMonthSummary>> | null = null;
+        let user: {
+            id: string;
+            subscriptionTier: string | null;
+            role: string | null;
+            llmMonthlyBudgetUsd: number | null;
+            llmMonthlyTokenLimit: number | null;
+            llmMonthlyRequestLimit: number | null;
+            llmAllowReasoning: boolean | null;
+            llmAllowedModels: string | null;
+            llmAllowedProviders: string | null;
+            llmOpenRouterKey: string | null;
+            llmOpenAiKey: string | null;
+            llmGeminiKey: string | null;
+            llmAnthropicKey: string | null;
+        } | null = null;
+
+        if (params.userId) {
+            user = await prisma.user.findUnique({
+                where: { id: params.userId },
+                select: {
+                    id: true,
+                    subscriptionTier: true,
+                    role: true,
+                    llmMonthlyBudgetUsd: true,
+                    llmMonthlyTokenLimit: true,
+                    llmMonthlyRequestLimit: true,
+                    llmAllowReasoning: true,
+                    llmAllowedModels: true,
+                    llmAllowedProviders: true,
+                    llmOpenRouterKey: true,
+                    llmOpenAiKey: true,
+                    llmGeminiKey: true,
+                    llmAnthropicKey: true,
+                },
+            });
+
+            if (!user) {
+                throw new Error('User not found');
+            }
+
+            if (user.role !== 'ADMIN' && (!user.subscriptionTier || user.subscriptionTier.toLowerCase() !== 'admin')) {
+                policy = await systemSettingsService.getEffectiveLlmPolicy(user);
+                usageSummary = await llmUsageService.getCurrentMonthSummary({
+                    id: user.id,
+                    subscriptionTier: user.subscriptionTier,
+                    llmMonthlyBudgetUsd: user.llmMonthlyBudgetUsd,
+                    llmMonthlyTokenLimit: user.llmMonthlyTokenLimit,
+                    llmMonthlyRequestLimit: user.llmMonthlyRequestLimit,
+                    llmAllowReasoning: user.llmAllowReasoning,
+                    llmAllowedModels: user.llmAllowedModels,
+                    llmAllowedProviders: user.llmAllowedProviders,
+                });
+
+                if (params.includeReasoning && !policy.allowReasoning) {
+                    throw new Error('Reasoning mode is not enabled for your plan');
+                }
+
+                if (policy.monthlyRequestLimit != null && usageSummary.totals.requestCount + 1 > policy.monthlyRequestLimit) {
+                    throw new Error('Monthly request limit reached for your plan');
+                }
+            }
+        }
+
+        const credentials = this.getResolvedProviderCredentials(settings, user);
+        const globallyAllowedModels = parseAllowedModels(settings.allowedModels);
+        const configuredProviders = parseActiveProviderList(settings.activeAiProvider);
+        const allowedProviders = policy?.allowedProviders && policy.allowedProviders.length > 0
+            ? configuredProviders.filter((provider) => policy!.allowedProviders!.includes(provider))
+            : configuredProviders;
+        const availableProviders = allowedProviders.filter((provider) => Boolean(credentials[provider].apiKey));
+
+        if (availableProviders.length === 0) {
+            throw new Error('No AI providers are configured for this user');
+        }
+
+        const providerOverride = availableProviders.join(',');
+        let candidates = await this.getAvailableModels(false, false, providerOverride);
+        candidates = candidates.filter((model) => {
+            const runtimeProvider = this.normalizeRuntimeProvider(model.provider, model.id);
+            return availableProviders.includes(runtimeProvider);
+        });
+
+        if (params.requireVision) {
+            candidates = candidates.filter((model) => model.supportsVision);
+        }
+
+        if (globallyAllowedModels.length > 0) {
+            candidates = candidates.filter((model) => globallyAllowedModels.includes(model.id));
+        }
+
+        if (policy?.allowedModels && policy.allowedModels.length > 0) {
+            candidates = candidates.filter((model) => policy!.allowedModels!.includes(model.id));
+        }
+
+        if (selectedModelId) {
+            candidates = candidates.filter((model) => model.id === selectedModelId);
+        }
+
+        if (candidates.length === 0) {
+            throw new Error('No AI models are available for the current provider and policy configuration');
+        }
+
+        const enrichedCandidates = candidates.map((model) => {
+            const estimatedCostUsd = this.estimateModelRequestCost(
+                model,
+                settings.modelPricing,
+                promptTokensEstimate,
+                projectedCompletionTokens
+            );
+            return {
+                model,
+                runtimeProvider: this.normalizeRuntimeProvider(model.provider, model.id),
+                estimatedCostUsd,
+                estimatedTotalTokens: promptTokensEstimate + projectedCompletionTokens,
+            };
+        }).sort((a, b) => {
+            const aCost = a.estimatedCostUsd ?? Number.MAX_SAFE_INTEGER;
+            const bCost = b.estimatedCostUsd ?? Number.MAX_SAFE_INTEGER;
+            if (aCost !== bCost) {
+                return aCost - bCost;
+            }
+            return Number(b.model.recommended === true) - Number(a.model.recommended === true);
+        });
+
+        let selectedCandidate = enrichedCandidates[0];
+
+        if (!selectedModelId && usageSummary && policy) {
+            const fittingCandidate = enrichedCandidates.find((candidate) => {
+                const nextTokens = usageSummary.totals.totalTokens + candidate.estimatedTotalTokens;
+                if (policy.monthlyTokenLimit != null && nextTokens > policy.monthlyTokenLimit) {
+                    return false;
+                }
+
+                if (policy.monthlyBudgetUsd != null && candidate.estimatedCostUsd != null) {
+                    return usageSummary.totals.totalCostUsd + candidate.estimatedCostUsd <= policy.monthlyBudgetUsd;
+                }
+
+                return true;
+            });
+
+            if (fittingCandidate) {
+                selectedCandidate = fittingCandidate;
+            }
+        }
+
+        if (usageSummary && policy) {
+            if (policy.monthlyTokenLimit != null && usageSummary.totals.totalTokens + selectedCandidate.estimatedTotalTokens > policy.monthlyTokenLimit) {
+                throw new Error('Monthly token limit reached for your plan');
+            }
+
+            if (
+                policy.monthlyBudgetUsd != null &&
+                selectedCandidate.estimatedCostUsd != null &&
+                usageSummary.totals.totalCostUsd + selectedCandidate.estimatedCostUsd > policy.monthlyBudgetUsd
+            ) {
+                throw new Error('Monthly LLM budget reached for your plan');
+            }
+        }
+
+        return {
+            provider: selectedCandidate.runtimeProvider,
+            modelId: selectedCandidate.model.id,
+            model: selectedCandidate.model,
+            estimatedCostUsd: selectedCandidate.estimatedCostUsd,
+            estimatedTotalTokens: selectedCandidate.estimatedTotalTokens,
+            keySource: credentials[selectedCandidate.runtimeProvider].keySource,
+            apiKey: credentials[selectedCandidate.runtimeProvider].apiKey,
+            usageSummary,
+            policy,
+            availableProviders,
+        };
     }
 
     private getErrorMessage(error: unknown): string {
@@ -702,21 +1002,29 @@ ${jobDescription}
         let completionTokens: number | null = null;
         let totalTokens: number | null = null;
         let estimatedCostUsd: number | null = null;
+        let keySource = 'none';
+        let routingReason = 'selected_model';
 
         try {
+            const executionPlan = await this.planAnalysisExecution({
+                userId: usageContext?.userId,
+                selectedModel,
+                maxTokens: normalizedMaxTokens,
+                resumeText: safeResumeText,
+                jobDescription: safeJobDescription,
+                requireVision: Boolean(usageContext?.resumeVisualInput),
+                includeReasoning: Boolean(modelParameters?.include_reasoning),
+            });
             const settings = await systemSettingsService.getSettings();
-            provider = settings.activeAiProvider || 'openrouter';
-            const allowedModels = parseAllowedModels(settings.allowedModels);
-
-            const selectedModelId = normalizeModelIdentifier(selectedModel);
+            provider = executionPlan.provider;
+            finalModel = executionPlan.modelId;
+            estimatedCostUsd = executionPlan.estimatedCostUsd;
+            keySource = executionPlan.keySource;
+            routingReason = selectedModel ? 'selected_model' : 'lowest_cost_within_policy';
             let responseText = '';
 
             if (provider === 'anthropic') {
-                finalModel = selectedModelId || DEFAULT_ANTHROPIC_MODEL;
-                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
-                    throw new Error('Selected model is not allowed by admin policy');
-                }
-                const anthropic = new Anthropic({ apiKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '' });
+                const anthropic = new Anthropic({ apiKey: executionPlan.apiKey || '' });
                 const completion = await anthropic.messages.create({
                     model: finalModel,
                     system: systemPrompt,
@@ -730,11 +1038,7 @@ ${jobDescription}
                 completionTokens = Number(usage?.output_tokens || 0) || null;
                 totalTokens = Number(usage?.input_tokens || 0) + Number(usage?.output_tokens || 0) || null;
             } else if (provider === 'gemini') {
-                finalModel = selectedModelId || DEFAULT_GEMINI_MODEL;
-                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
-                    throw new Error('Selected model is not allowed by admin policy');
-                }
-                const genAI = new GoogleGenerativeAI(settings.geminiKey || process.env.GEMINI_API_KEY || '');
+                const genAI = new GoogleGenerativeAI(executionPlan.apiKey || '');
                 const genModel = genAI.getGenerativeModel({
                     model: finalModel,
                     generationConfig: {
@@ -758,11 +1062,7 @@ ${jobDescription}
                 completionTokens = Number(usage?.candidatesTokenCount || usage?.outputTokens || 0) || null;
                 totalTokens = Number(usage?.totalTokenCount || 0) || null;
             } else if (provider === 'openai') {
-                finalModel = selectedModelId || DEFAULT_OPENAI_MODEL;
-                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
-                    throw new Error('Selected model is not allowed by admin policy');
-                }
-                const openai = new OpenAI({ apiKey: settings.openAiKey || process.env.OPENAI_API_KEY || '' });
+                const openai = new OpenAI({ apiKey: executionPlan.apiKey || '' });
                 const completion = await this.createChatCompletionWithTokenFallback(openai, {
                     model: finalModel,
                     temperature: normalizedTemperature,
@@ -777,13 +1077,8 @@ ${jobDescription}
                 completionTokens = Number(usage?.completion_tokens || 0) || null;
                 totalTokens = Number(usage?.total_tokens || 0) || null;
             } else {
-                // OpenRouter
-                finalModel = selectedModelId || DEFAULT_MODEL;
-                if (allowedModels.length > 0 && !allowedModels.includes(finalModel)) {
-                    throw new Error('Selected model is not allowed by admin policy');
-                }
                 const openrouter = new OpenAI({
-                    apiKey: settings.openRouterKey || process.env.OPENROUTER_API_KEY || '',
+                    apiKey: executionPlan.apiKey || '',
                     baseURL: 'https://openrouter.ai/api/v1',
                 });
                 const completionParams: CompletionParameters = {
@@ -835,12 +1130,7 @@ ${jobDescription}
                 totalTokens = promptTokens + completionTokens;
             }
 
-            estimatedCostUsd = estimateCostFromPricingMap(
-                settings.modelPricing,
-                finalModel,
-                promptTokens,
-                completionTokens
-            );
+            estimatedCostUsd = this.estimateModelRequestCost(executionPlan.model, settings.modelPricing, promptTokens, completionTokens);
 
             const processingTimeMs = Date.now() - startedAt;
 
@@ -916,6 +1206,7 @@ ${jobDescription}
                         responseSummary: `overallScore=${analysisResult.overallScore};method=${analysisResult.analysisMethod}`,
                         responseTimeMs: processingTimeMs,
                         status: 'completed',
+                        details: JSON.stringify({ keySource, routingReason }),
                     } as any,
                 }).catch(() => undefined);
             }
@@ -936,7 +1227,11 @@ ${jobDescription}
                         costUsd: estimatedCostUsd,
                         responseTimeMs: Date.now() - startedAt,
                         status: 'failed',
-                        details: error instanceof Error ? error.message : 'Unknown AI analysis error',
+                        details: JSON.stringify({
+                            error: error instanceof Error ? error.message : 'Unknown AI analysis error',
+                            keySource,
+                            routingReason,
+                        }),
                     } as any,
                 }).catch(() => undefined);
             }

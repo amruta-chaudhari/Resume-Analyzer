@@ -29,8 +29,11 @@ import type {
 import { Logger } from '../utils/logger';
 import { sanitizeJobDescription, sanitizeJobTitle } from '../utils/sanitizer';
 import { systemSettingsService } from '../services/system-settings.service';
+import { llmUsageService } from '../services/llm-usage.service';
+import { AIService } from '../services/ai.service';
 
 const router: Router = Router();
+const aiService = new AIService();
 
 const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
 
@@ -236,6 +239,38 @@ const serverError = (res: Response, error: string) => {
   });
 };
 
+router.get('/usage/summary', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        subscriptionTier: true,
+        llmMonthlyBudgetUsd: true,
+        llmMonthlyTokenLimit: true,
+        llmMonthlyRequestLimit: true,
+        llmAllowReasoning: true,
+        llmAllowedModels: true,
+        llmAllowedProviders: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const summary = await llmUsageService.getCurrentMonthSummary(user);
+    return res.json({ success: true, data: summary });
+  } catch (error) {
+    const err = error instanceof Error ? error.message : 'Failed to load usage summary';
+    return res.status(500).json({ success: false, error: err });
+  }
+});
+
 // Configure multer for file uploads (store in memory)
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -345,18 +380,14 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
           });
         }
 
-        const settings = await systemSettingsService.getSettings({ includeSecrets: false });
-        await enforceLlmPolicy({
+        const executionPlan = await aiService.planAnalysisExecution({
           userId: req.userId,
-          includeReasoning,
           selectedModel: modelIdentifier || undefined,
-          fallbackModel: process.env.ANALYSIS_MODEL || 'openai/gpt-5.4-mini',
           maxTokens: maxTokens ?? 4000,
           resumeText: '',
           resumeFileBytes: req.file.size,
           jobDescription,
-          modelPricing: settings.modelPricing,
-          systemAllowedModels: settings.allowedModels,
+          includeReasoning,
         });
 
         // Queue the analysis job instead of processing synchronously
@@ -368,7 +399,7 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             fileBuffer: req.file.buffer,
             fileName: req.file.originalname,
             fileMimeType: req.file.mimetype,
-            selectedModel,
+            selectedModel: executionPlan.modelId,
             temperature,
             max_completion_tokens: maxTokens,
             max_tokens: maxTokens,

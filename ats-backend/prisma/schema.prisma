@@ -43,8 +43,14 @@ model User {
   // LLM Governance (custom user overrides)
   llmMonthlyBudgetUsd Float?
   llmMonthlyTokenLimit Int?
+  llmMonthlyRequestLimit Int?
   llmAllowReasoning   Boolean?
   llmAllowedModels    String? // JSON array of model ids
+  llmAllowedProviders String? // JSON array of provider ids
+  llmOpenRouterKey    String?
+  llmOpenAiKey        String?
+  llmGeminiKey        String?
+  llmAnthropicKey     String?
 
   // Usage Tracking
   resumesCreated       Int       @default(0)

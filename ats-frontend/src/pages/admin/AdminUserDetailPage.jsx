@@ -24,8 +24,14 @@ const emptyFormState = {
   deleted: false,
   llmMonthlyBudgetUsd: '',
   llmMonthlyTokenLimit: '',
+  llmMonthlyRequestLimit: '',
   llmAllowReasoning: 'inherit',
   llmAllowedModels: '',
+  llmAllowedProviders: '',
+  llmOpenRouterKey: '',
+  llmOpenAiKey: '',
+  llmGeminiKey: '',
+  llmAnthropicKey: '',
 };
 
 const AdminUserDetailPage = () => {
@@ -80,6 +86,8 @@ const AdminUserDetailPage = () => {
           detail.user.llmMonthlyBudgetUsd == null ? '' : String(detail.user.llmMonthlyBudgetUsd),
         llmMonthlyTokenLimit:
           detail.user.llmMonthlyTokenLimit == null ? '' : String(detail.user.llmMonthlyTokenLimit),
+        llmMonthlyRequestLimit:
+          detail.user.llmMonthlyRequestLimit == null ? '' : String(detail.user.llmMonthlyRequestLimit),
         llmAllowReasoning:
           detail.user.llmAllowReasoning == null
             ? 'inherit'
@@ -87,6 +95,11 @@ const AdminUserDetailPage = () => {
               ? 'true'
               : 'false',
         llmAllowedModels: parseJsonArrayString(detail.user.llmAllowedModels).join(', '),
+        llmAllowedProviders: parseJsonArrayString(detail.user.llmAllowedProviders).join(', '),
+        llmOpenRouterKey: '',
+        llmOpenAiKey: '',
+        llmGeminiKey: '',
+        llmAnthropicKey: '',
       });
     } catch (error) {
       setErrorMessage(error.message || 'Failed to load user details.');
@@ -121,9 +134,11 @@ const AdminUserDetailPage = () => {
 
     const budgetValue = formState.llmMonthlyBudgetUsd.trim();
     const tokenValue = formState.llmMonthlyTokenLimit.trim();
+    const requestValue = formState.llmMonthlyRequestLimit.trim();
 
     const parsedBudget = budgetValue === '' ? null : Number(budgetValue);
     const parsedTokenLimit = tokenValue === '' ? null : Number(tokenValue);
+    const parsedRequestLimit = requestValue === '' ? null : Number(requestValue);
 
     if (parsedBudget != null && (!Number.isFinite(parsedBudget) || parsedBudget < 0)) {
       setErrorMessage('Monthly budget must be a non-negative number.');
@@ -133,6 +148,12 @@ const AdminUserDetailPage = () => {
 
     if (parsedTokenLimit != null && (!Number.isFinite(parsedTokenLimit) || parsedTokenLimit < 0)) {
       setErrorMessage('Monthly token limit must be a non-negative number.');
+      setSavingProfile(false);
+      return;
+    }
+
+    if (parsedRequestLimit != null && (!Number.isFinite(parsedRequestLimit) || parsedRequestLimit < 0)) {
+      setErrorMessage('Monthly request limit must be a non-negative number.');
       setSavingProfile(false);
       return;
     }
@@ -149,11 +170,17 @@ const AdminUserDetailPage = () => {
         deleted: formState.deleted,
         llmMonthlyBudgetUsd: parsedBudget,
         llmMonthlyTokenLimit: parsedTokenLimit == null ? null : Math.floor(parsedTokenLimit),
+        llmMonthlyRequestLimit: parsedRequestLimit == null ? null : Math.floor(parsedRequestLimit),
         llmAllowReasoning:
           formState.llmAllowReasoning === 'inherit'
             ? null
             : formState.llmAllowReasoning === 'true',
         llmAllowedModels: normalizeModelListInput(formState.llmAllowedModels),
+        llmAllowedProviders: normalizeModelListInput(formState.llmAllowedProviders),
+        llmOpenRouterKey: formState.llmOpenRouterKey.trim() || undefined,
+        llmOpenAiKey: formState.llmOpenAiKey.trim() || undefined,
+        llmGeminiKey: formState.llmGeminiKey.trim() || undefined,
+        llmAnthropicKey: formState.llmAnthropicKey.trim() || undefined,
       };
 
       await adminService.updateUser(userId, payload);
@@ -332,6 +359,26 @@ const AdminUserDetailPage = () => {
             <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{userDetail.user.analysesRunToday}</p>
           </div>
         </div>
+
+        {userDetail.usageSummary && (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Monthly Requests</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{userDetail.usageSummary.totals.requestCount}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Remaining {userDetail.usageSummary.remaining.monthlyRequestLimit ?? 'Unlimited'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Monthly Tokens</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{userDetail.usageSummary.totals.totalTokens}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Remaining {userDetail.usageSummary.remaining.monthlyTokenLimit ?? 'Unlimited'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Monthly Spend</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">${Number(userDetail.usageSummary.totals.totalCostUsd || 0).toFixed(2)}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Remaining {userDetail.usageSummary.remaining.monthlyBudgetUsd == null ? 'Unlimited' : `$${Number(userDetail.usageSummary.remaining.monthlyBudgetUsd).toFixed(2)}`}</p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -443,6 +490,19 @@ const AdminUserDetailPage = () => {
               />
             </label>
 
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              Monthly Request Limit Override
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={formState.llmMonthlyRequestLimit}
+                onChange={(event) => handleFieldChange('llmMonthlyRequestLimit', event.target.value)}
+                placeholder="Empty = inherit from plan"
+                className={adminFieldClass}
+              />
+            </label>
+
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2">
               Allowed Models Override (comma separated model IDs)
               <input
@@ -450,6 +510,17 @@ const AdminUserDetailPage = () => {
                 value={formState.llmAllowedModels}
                 onChange={(event) => handleFieldChange('llmAllowedModels', event.target.value)}
                 placeholder="openai/gpt-4o-mini, anthropic/claude-3.5-sonnet"
+                className={adminFieldClass}
+              />
+            </label>
+
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200 md:col-span-2">
+              Allowed Providers Override (comma separated provider IDs)
+              <input
+                type="text"
+                value={formState.llmAllowedProviders}
+                onChange={(event) => handleFieldChange('llmAllowedProviders', event.target.value)}
+                placeholder="openrouter, openai, gemini, anthropic"
                 className={adminFieldClass}
               />
             </label>
@@ -485,6 +556,53 @@ const AdminUserDetailPage = () => {
                 />
                 Soft delete account
               </label>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/90 p-4 dark:border-slate-700 dark:bg-slate-900/60 md:col-span-2">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Per-User Provider Keys</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">If a user-specific key is set, it is used before the global/provider env key.</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  OpenRouter Key
+                  <input
+                    type="password"
+                    value={formState.llmOpenRouterKey}
+                    onChange={(event) => handleFieldChange('llmOpenRouterKey', event.target.value)}
+                    placeholder={userDetail.user.openRouterKeyMasked || 'Set per-user OpenRouter key'}
+                    className={adminFieldClass}
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  OpenAI Key
+                  <input
+                    type="password"
+                    value={formState.llmOpenAiKey}
+                    onChange={(event) => handleFieldChange('llmOpenAiKey', event.target.value)}
+                    placeholder={userDetail.user.openAiKeyMasked || 'Set per-user OpenAI key'}
+                    className={adminFieldClass}
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Gemini Key
+                  <input
+                    type="password"
+                    value={formState.llmGeminiKey}
+                    onChange={(event) => handleFieldChange('llmGeminiKey', event.target.value)}
+                    placeholder={userDetail.user.geminiKeyMasked || 'Set per-user Gemini key'}
+                    className={adminFieldClass}
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Anthropic Key
+                  <input
+                    type="password"
+                    value={formState.llmAnthropicKey}
+                    onChange={(event) => handleFieldChange('llmAnthropicKey', event.target.value)}
+                    placeholder={userDetail.user.anthropicKeyMasked || 'Set per-user Anthropic key'}
+                    className={adminFieldClass}
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </form>
@@ -533,6 +651,26 @@ const AdminUserDetailPage = () => {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
+        {userDetail.usageSummary && (
+          <div className={adminCardClass}>
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Provider Spend And Limits</h3>
+            <div className="mt-4 space-y-3">
+              {userDetail.usageSummary.providerBreakdown.length === 0 && (
+                <p className="text-sm text-slate-500 dark:text-slate-400">No provider usage recorded for this billing window.</p>
+              )}
+              {userDetail.usageSummary.providerBreakdown.map((provider) => (
+                <div key={provider.provider} className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-900 dark:text-white">{provider.provider}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">${Number(provider.totalCostUsd || 0).toFixed(2)}</p>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{provider.requestCount} requests • {provider.totalTokens} tokens</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className={adminCardClass}>
           <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Recent Analyses</h3>
           <div className="mt-4 space-y-3">

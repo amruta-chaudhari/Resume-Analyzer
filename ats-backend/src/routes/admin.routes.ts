@@ -86,8 +86,14 @@ router.patch(
     body('deleted').optional().isBoolean(),
     body('llmMonthlyBudgetUsd').optional({ nullable: true }).isFloat({ min: 0 }),
     body('llmMonthlyTokenLimit').optional({ nullable: true }).isInt({ min: 0 }),
+    body('llmMonthlyRequestLimit').optional({ nullable: true }).isInt({ min: 0 }),
     body('llmAllowReasoning').optional({ nullable: true }).isBoolean(),
     body('llmAllowedModels').optional({ nullable: true }).isString(),
+    body('llmAllowedProviders').optional({ nullable: true }).isString(),
+    body('llmOpenRouterKey').optional({ nullable: true }).isString(),
+    body('llmOpenAiKey').optional({ nullable: true }).isString(),
+    body('llmGeminiKey').optional({ nullable: true }).isString(),
+    body('llmAnthropicKey').optional({ nullable: true }).isString(),
   ],
   async (req: AdminRequest, res: Response) => {
     try {

@@ -2,10 +2,13 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 
 export type PlanLimitTier = 'free' | 'pro' | 'enterprise' | 'admin';
+export const ALL_AI_PROVIDERS = ['openrouter', 'openai', 'gemini', 'anthropic'] as const;
+export type AiProviderId = (typeof ALL_AI_PROVIDERS)[number];
 
 export interface PlanLimitConfig {
   monthlyBudgetUsd: number | null;
   monthlyTokenLimit: number | null;
+  monthlyRequestLimit: number | null;
   allowReasoning: boolean;
   allowedModels: string[] | null;
 }
@@ -21,8 +24,10 @@ export interface EffectiveLlmPolicy {
   subscriptionTier: string;
   monthlyBudgetUsd: number | null;
   monthlyTokenLimit: number | null;
+  monthlyRequestLimit: number | null;
   allowReasoning: boolean;
   allowedModels: string[] | null;
+  allowedProviders: AiProviderId[] | null;
 }
 
 export interface SystemSettingsUpdate {
@@ -52,30 +57,34 @@ const DEFAULT_PLAN_LIMITS: PlanLimitsConfig = {
   free: {
     monthlyBudgetUsd: 2,
     monthlyTokenLimit: 150000,
+    monthlyRequestLimit: 40,
     allowReasoning: false,
     allowedModels: null,
   },
   pro: {
     monthlyBudgetUsd: 25,
     monthlyTokenLimit: 2000000,
+    monthlyRequestLimit: 600,
     allowReasoning: true,
     allowedModels: null,
   },
   enterprise: {
     monthlyBudgetUsd: 200,
     monthlyTokenLimit: 20000000,
+    monthlyRequestLimit: 6000,
     allowReasoning: true,
     allowedModels: null,
   },
   admin: {
     monthlyBudgetUsd: null,
     monthlyTokenLimit: null,
+    monthlyRequestLimit: null,
     allowReasoning: true,
     allowedModels: null,
   },
 };
 
-const PROVIDER_VALUES = new Set(['openrouter', 'openai', 'gemini', 'anthropic', 'multiple']);
+const PROVIDER_VALUES = new Set([...ALL_AI_PROVIDERS, 'multiple']);
 
 const normalizeNumberOrNull = (value: unknown): number | null => {
   if (value == null || value === '') {
@@ -107,6 +116,19 @@ const normalizeStringArray = (value: unknown): string[] | null => {
   return Array.from(new Set(normalized));
 };
 
+const normalizeProviderArray = (value: unknown): AiProviderId[] | null => {
+  const normalized = normalizeStringArray(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const providers = normalized.filter((item): item is AiProviderId =>
+    (ALL_AI_PROVIDERS as readonly string[]).includes(item)
+  );
+
+  return providers.length > 0 ? Array.from(new Set(providers)) : null;
+};
+
 const safeJsonParse = <T>(value: string | null | undefined, fallback: T): T => {
   if (!value) {
     return fallback;
@@ -132,6 +154,7 @@ const normalizePlanLimitEntry = (
   return {
     monthlyBudgetUsd: normalizeNumberOrNull(record.monthlyBudgetUsd) ?? base.monthlyBudgetUsd,
     monthlyTokenLimit: normalizeNumberOrNull(record.monthlyTokenLimit) ?? base.monthlyTokenLimit,
+    monthlyRequestLimit: normalizeNumberOrNull(record.monthlyRequestLimit) ?? base.monthlyRequestLimit,
     allowReasoning:
       typeof record.allowReasoning === 'boolean' ? record.allowReasoning : base.allowReasoning,
     allowedModels: normalizeStringArray(record.allowedModels) ?? base.allowedModels,
@@ -159,7 +182,11 @@ const normalizeProviderValue = (value: unknown): string => {
   }
 
   const normalized = value.trim().toLowerCase();
-  if (PROVIDER_VALUES.has(normalized)) {
+  if (normalized === 'multiple') {
+    return ALL_AI_PROVIDERS.join(',');
+  }
+
+  if ((ALL_AI_PROVIDERS as readonly string[]).includes(normalized)) {
     return normalized;
   }
 
@@ -172,11 +199,25 @@ const normalizeProviderValue = (value: unknown): string => {
     return 'openrouter';
   }
 
-  if (parts.length > 1) {
-    return 'multiple';
+  return Array.from(new Set(parts)).join(',');
+};
+
+export const parseProviderList = (value: string | null | undefined): AiProviderId[] => {
+  if (!value) {
+    return ['openrouter'];
   }
 
-  return parts[0];
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'multiple') {
+    return [...ALL_AI_PROVIDERS];
+  }
+
+  const parts = normalized
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item): item is AiProviderId => (ALL_AI_PROVIDERS as readonly string[]).includes(item));
+
+  return parts.length > 0 ? Array.from(new Set(parts)) : ['openrouter'];
 };
 
 const maskSecret = (value: string | null): string | null => {
@@ -312,13 +353,16 @@ export class SystemSettingsService {
     subscriptionTier?: string | null;
     llmMonthlyBudgetUsd?: number | null;
     llmMonthlyTokenLimit?: number | null;
+    llmMonthlyRequestLimit?: number | null;
     llmAllowReasoning?: boolean | null;
     llmAllowedModels?: string | null;
+    llmAllowedProviders?: string | null;
   }): Promise<EffectiveLlmPolicy> {
     const normalizedTier = (user.subscriptionTier || 'free').toLowerCase() as PlanLimitTier;
     const planLimits = await this.getPlanLimits();
     const tierLimits = planLimits[normalizedTier] || planLimits.free;
     const userAllowedModels = normalizeStringArray(safeJsonParse<unknown>(user.llmAllowedModels, null));
+    const userAllowedProviders = normalizeProviderArray(safeJsonParse<unknown>(user.llmAllowedProviders, null));
 
     return {
       subscriptionTier: normalizedTier,
@@ -330,9 +374,14 @@ export class SystemSettingsService {
         user.llmMonthlyTokenLimit != null
           ? normalizeNumberOrNull(user.llmMonthlyTokenLimit)
           : tierLimits.monthlyTokenLimit,
+      monthlyRequestLimit:
+        user.llmMonthlyRequestLimit != null
+          ? normalizeNumberOrNull(user.llmMonthlyRequestLimit)
+          : tierLimits.monthlyRequestLimit,
       allowReasoning:
         user.llmAllowReasoning != null ? Boolean(user.llmAllowReasoning) : tierLimits.allowReasoning,
       allowedModels: userAllowedModels ?? tierLimits.allowedModels,
+      allowedProviders: userAllowedProviders,
     };
   }
 

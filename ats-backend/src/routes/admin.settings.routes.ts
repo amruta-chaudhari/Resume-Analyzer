@@ -114,6 +114,7 @@ const validatePlanLimitsString = (raw: unknown): boolean => {
     const tierRecord = tierValue as Record<string, unknown>;
     const budget = tierRecord.monthlyBudgetUsd;
     const tokens = tierRecord.monthlyTokenLimit;
+    const requests = tierRecord.monthlyRequestLimit;
     const allowReasoning = tierRecord.allowReasoning;
     const allowedModels = tierRecord.allowedModels;
 
@@ -133,6 +134,7 @@ const validatePlanLimitsString = (raw: unknown): boolean => {
     return (
       isNumberOrNull(budget) &&
       isNumberOrNull(tokens) &&
+      isNumberOrNull(requests) &&
       typeof allowReasoning === 'boolean' &&
       isAllowedModelsValid
     );

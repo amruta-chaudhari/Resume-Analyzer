@@ -243,13 +243,16 @@ const SystemSettingsPanel = () => {
       const currentTier = planLimits[tier] || {};
       const budgetRaw = currentTier.monthlyBudgetUsd;
       const tokenRaw = currentTier.monthlyTokenLimit;
+      const requestRaw = currentTier.monthlyRequestLimit;
 
       const budgetValue = budgetRaw == null || budgetRaw === '' ? null : Number(budgetRaw);
       const tokenValue = tokenRaw == null || tokenRaw === '' ? null : Number(tokenRaw);
+      const requestValue = requestRaw == null || requestRaw === '' ? null : Number(requestRaw);
 
       normalized[tier] = {
         monthlyBudgetUsd: Number.isFinite(budgetValue) && budgetValue >= 0 ? budgetValue : null,
         monthlyTokenLimit: Number.isFinite(tokenValue) && tokenValue >= 0 ? Math.floor(tokenValue) : null,
+        monthlyRequestLimit: Number.isFinite(requestValue) && requestValue >= 0 ? Math.floor(requestValue) : null,
         allowReasoning: Boolean(currentTier.allowReasoning),
         allowedModels: Array.isArray(currentTier.allowedModels)
           ? currentTier.allowedModels.filter((item) => typeof item === 'string' && item.trim().length > 0)
@@ -580,6 +583,18 @@ const SystemSettingsPanel = () => {
                           step="1"
                           value={limit.monthlyTokenLimit ?? ''}
                           onChange={(event) => setPlanField(tier, 'monthlyTokenLimit', event.target.value)}
+                          className={adminFieldClass}
+                        />
+                      </label>
+
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
+                        Monthly Request Limit
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={limit.monthlyRequestLimit ?? ''}
+                          onChange={(event) => setPlanField(tier, 'monthlyRequestLimit', event.target.value)}
                           className={adminFieldClass}
                         />
                       </label>

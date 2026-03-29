@@ -329,6 +329,16 @@ export const getAnalysisById = async (analysisId) => {
   }
 };
 
+export const getUsageSummary = async () => {
+  try {
+    const response = await apiClient.get('/api/usage/summary');
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to fetch usage summary:', error);
+    throw new Error(`Failed to load usage summary: ${error.message}`);
+  }
+};
+
 export const parseResumeText = async (text) => {
   try {
     const response = await apiClient.post('/api/resumes/parse', { text });

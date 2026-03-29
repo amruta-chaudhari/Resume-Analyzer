@@ -5,6 +5,8 @@ import { ConflictError, NotFoundError } from '../utils/errors';
 import { Logger } from '../utils/logger';
 import { sanitizeEmail, sanitizeString } from '../utils/sanitizer';
 import type { UserRole } from '../types';
+import { ALL_AI_PROVIDERS } from './system-settings.service';
+import { llmUsageService } from './llm-usage.service';
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
@@ -32,8 +34,14 @@ type UpdateUserInput = {
   deleted?: boolean;
   llmMonthlyBudgetUsd?: number | null;
   llmMonthlyTokenLimit?: number | null;
+  llmMonthlyRequestLimit?: number | null;
   llmAllowReasoning?: boolean | null;
   llmAllowedModels?: string | null;
+  llmAllowedProviders?: string | null;
+  llmOpenRouterKey?: string | null;
+  llmOpenAiKey?: string | null;
+  llmGeminiKey?: string | null;
+  llmAnthropicKey?: string | null;
 };
 
 const USER_ROLES: UserRole[] = ['USER', 'ADMIN'];
@@ -77,6 +85,62 @@ const parseStringArrayAsJson = (value: unknown): string | null | undefined => {
     return JSON.stringify(value.map((item) => item.trim()));
   }
   throw new Error('llmAllowedModels must be a JSON array of model ids');
+};
+
+const parseProviderArrayAsJson = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null || value === '') {
+    return null;
+  }
+
+  const providerSet = new Set(ALL_AI_PROVIDERS);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string' && providerSet.has(item as any))) {
+      throw new Error('llmAllowedProviders must be a JSON array of provider ids');
+    }
+    return JSON.stringify(Array.from(new Set(parsed)));
+  }
+
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string' && providerSet.has(item as any))) {
+    return JSON.stringify(Array.from(new Set(value)));
+  }
+
+  throw new Error('llmAllowedProviders must be a JSON array of provider ids');
+};
+
+const parseSecretValue = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('Provider keys must be strings');
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const maskSecret = (value: string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const prefix = value.slice(0, Math.min(6, value.length));
+  const suffix = value.slice(-4);
+  return `${prefix}...${suffix}`;
 };
 
 const DEFAULT_PAGE = 1;
@@ -194,8 +258,14 @@ export class AdminService {
           deletedAt: true,
           llmMonthlyBudgetUsd: true,
           llmMonthlyTokenLimit: true,
+          llmMonthlyRequestLimit: true,
           llmAllowReasoning: true,
           llmAllowedModels: true,
+          llmAllowedProviders: true,
+          llmOpenRouterKey: true,
+          llmOpenAiKey: true,
+          llmGeminiKey: true,
+          llmAnthropicKey: true,
           resumesCreated: true,
           analysesRunToday: true,
           lastAnalysisDate: true,
@@ -224,6 +294,7 @@ export class AdminService {
       recentAiUsage,
       recentSessions,
       recentAuditLogs,
+      usageSummary,
     ] = await Promise.all([
       prisma.resume.findMany({
         where: { userId },
@@ -322,18 +393,45 @@ export class AdminService {
           createdAt: true,
         },
       }),
+      llmUsageService.getCurrentMonthSummary({
+        id: user.id,
+        subscriptionTier: user.subscriptionTier,
+        llmMonthlyBudgetUsd: user.llmMonthlyBudgetUsd,
+        llmMonthlyTokenLimit: user.llmMonthlyTokenLimit,
+        llmMonthlyRequestLimit: user.llmMonthlyRequestLimit,
+        llmAllowReasoning: user.llmAllowReasoning,
+        llmAllowedModels: user.llmAllowedModels,
+        llmAllowedProviders: user.llmAllowedProviders,
+      }).catch(() => null),
     ]);
+
+    const {
+      llmOpenRouterKey,
+      llmOpenAiKey,
+      llmGeminiKey,
+      llmAnthropicKey,
+      ...safeUser
+    } = user;
 
     return {
       user: {
-        ...user,
+        ...safeUser,
         counts: user._count,
+        hasOpenRouterKey: Boolean(llmOpenRouterKey),
+        hasOpenAiKey: Boolean(llmOpenAiKey),
+        hasGeminiKey: Boolean(llmGeminiKey),
+        hasAnthropicKey: Boolean(llmAnthropicKey),
+        openRouterKeyMasked: maskSecret(llmOpenRouterKey),
+        openAiKeyMasked: maskSecret(llmOpenAiKey),
+        geminiKeyMasked: maskSecret(llmGeminiKey),
+        anthropicKeyMasked: maskSecret(llmAnthropicKey),
       },
       recentResumes,
       recentAnalyses,
       recentJobDescriptions,
       recentAiUsage,
       recentSessions,
+      usageSummary,
       recentAuditLogs: recentAuditLogs.map((entry) => ({
         ...entry,
         changes: this.parseChanges(entry.changes),
@@ -373,12 +471,18 @@ export class AdminService {
             updatedAt: true,
             lastLoginAt: true,
             deletedAt: true,
-            llmMonthlyBudgetUsd: true,
-            llmMonthlyTokenLimit: true,
-            llmAllowReasoning: true,
-            llmAllowedModels: true,
-          },
-        });
+             llmMonthlyBudgetUsd: true,
+             llmMonthlyTokenLimit: true,
+             llmMonthlyRequestLimit: true,
+             llmAllowReasoning: true,
+             llmAllowedModels: true,
+             llmAllowedProviders: true,
+             llmOpenRouterKey: true,
+             llmOpenAiKey: true,
+             llmGeminiKey: true,
+             llmAnthropicKey: true,
+           },
+         });
 
         await this.createAuditLog(tx, auditContext, {
           action: 'ADMIN_USER_UPDATED',
@@ -542,12 +646,37 @@ export class AdminService {
       normalized.llmMonthlyTokenLimit = parsed != null ? Math.floor(parsed) : null;
     }
 
+    if (input.llmMonthlyRequestLimit !== undefined) {
+      const parsed = parseNumberOrNull(input.llmMonthlyRequestLimit);
+      normalized.llmMonthlyRequestLimit = parsed != null ? Math.floor(parsed) : null;
+    }
+
     if (input.llmAllowReasoning !== undefined) {
       normalized.llmAllowReasoning = input.llmAllowReasoning == null ? null : Boolean(input.llmAllowReasoning);
     }
 
     if (input.llmAllowedModels !== undefined) {
       normalized.llmAllowedModels = parseStringArrayAsJson(input.llmAllowedModels) ?? null;
+    }
+
+    if (input.llmAllowedProviders !== undefined) {
+      normalized.llmAllowedProviders = parseProviderArrayAsJson(input.llmAllowedProviders) ?? null;
+    }
+
+    if (input.llmOpenRouterKey !== undefined) {
+      normalized.llmOpenRouterKey = parseSecretValue(input.llmOpenRouterKey) ?? null;
+    }
+
+    if (input.llmOpenAiKey !== undefined) {
+      normalized.llmOpenAiKey = parseSecretValue(input.llmOpenAiKey) ?? null;
+    }
+
+    if (input.llmGeminiKey !== undefined) {
+      normalized.llmGeminiKey = parseSecretValue(input.llmGeminiKey) ?? null;
+    }
+
+    if (input.llmAnthropicKey !== undefined) {
+      normalized.llmAnthropicKey = parseSecretValue(input.llmAnthropicKey) ?? null;
     }
 
     return normalized;
@@ -565,8 +694,14 @@ export class AdminService {
       deletedAt: Date | null;
       llmMonthlyBudgetUsd?: number | null;
       llmMonthlyTokenLimit?: number | null;
+      llmMonthlyRequestLimit?: number | null;
       llmAllowReasoning?: boolean | null;
       llmAllowedModels?: string | null;
+      llmAllowedProviders?: string | null;
+      llmOpenRouterKey?: string | null;
+      llmOpenAiKey?: string | null;
+      llmGeminiKey?: string | null;
+      llmAnthropicKey?: string | null;
     },
     input: UpdateUserInput
   ): Prisma.UserUpdateInput {
@@ -637,6 +772,13 @@ export class AdminService {
     }
 
     if (
+      input.llmMonthlyRequestLimit !== undefined &&
+      input.llmMonthlyRequestLimit !== existingUser.llmMonthlyRequestLimit
+    ) {
+      nextData.llmMonthlyRequestLimit = input.llmMonthlyRequestLimit;
+    }
+
+    if (
       input.llmAllowReasoning !== undefined &&
       input.llmAllowReasoning !== existingUser.llmAllowReasoning
     ) {
@@ -648,6 +790,29 @@ export class AdminService {
       input.llmAllowedModels !== existingUser.llmAllowedModels
     ) {
       nextData.llmAllowedModels = input.llmAllowedModels;
+    }
+
+    if (
+      input.llmAllowedProviders !== undefined &&
+      input.llmAllowedProviders !== existingUser.llmAllowedProviders
+    ) {
+      nextData.llmAllowedProviders = input.llmAllowedProviders;
+    }
+
+    if (input.llmOpenRouterKey !== undefined && input.llmOpenRouterKey !== existingUser.llmOpenRouterKey) {
+      nextData.llmOpenRouterKey = input.llmOpenRouterKey;
+    }
+
+    if (input.llmOpenAiKey !== undefined && input.llmOpenAiKey !== existingUser.llmOpenAiKey) {
+      nextData.llmOpenAiKey = input.llmOpenAiKey;
+    }
+
+    if (input.llmGeminiKey !== undefined && input.llmGeminiKey !== existingUser.llmGeminiKey) {
+      nextData.llmGeminiKey = input.llmGeminiKey;
+    }
+
+    if (input.llmAnthropicKey !== undefined && input.llmAnthropicKey !== existingUser.llmAnthropicKey) {
+      nextData.llmAnthropicKey = input.llmAnthropicKey;
     }
 
     return nextData;
@@ -671,8 +836,14 @@ export class AdminService {
           deletedAt: true,
           llmMonthlyBudgetUsd: true,
           llmMonthlyTokenLimit: true,
+          llmMonthlyRequestLimit: true,
           llmAllowReasoning: true,
           llmAllowedModels: true,
+          llmAllowedProviders: true,
+          llmOpenRouterKey: true,
+          llmOpenAiKey: true,
+          llmGeminiKey: true,
+          llmAnthropicKey: true,
         },
       });
 
@@ -719,12 +890,18 @@ export class AdminService {
     subscriptionTier: string;
     emailVerified: boolean;
     deletedAt: Date | null;
-    llmMonthlyBudgetUsd?: number | null;
-    llmMonthlyTokenLimit?: number | null;
-    llmAllowReasoning?: boolean | null;
-    llmAllowedModels?: string | null;
-  }) {
-    return {
+      llmMonthlyBudgetUsd?: number | null;
+      llmMonthlyTokenLimit?: number | null;
+      llmMonthlyRequestLimit?: number | null;
+      llmAllowReasoning?: boolean | null;
+      llmAllowedModels?: string | null;
+      llmAllowedProviders?: string | null;
+      llmOpenRouterKey?: string | null;
+      llmOpenAiKey?: string | null;
+      llmGeminiKey?: string | null;
+      llmAnthropicKey?: string | null;
+    }) {
+      return {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
@@ -736,8 +913,14 @@ export class AdminService {
       deletedAt: user.deletedAt,
       llmMonthlyBudgetUsd: user.llmMonthlyBudgetUsd,
       llmMonthlyTokenLimit: user.llmMonthlyTokenLimit,
+      llmMonthlyRequestLimit: user.llmMonthlyRequestLimit,
       llmAllowReasoning: user.llmAllowReasoning,
       llmAllowedModels: user.llmAllowedModels,
+      llmAllowedProviders: user.llmAllowedProviders,
+      hasOpenRouterKey: Boolean(user.llmOpenRouterKey),
+      hasOpenAiKey: Boolean(user.llmOpenAiKey),
+      hasGeminiKey: Boolean(user.llmGeminiKey),
+      hasAnthropicKey: Boolean(user.llmAnthropicKey),
     };
   }
 
