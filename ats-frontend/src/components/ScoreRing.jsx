@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 const ScoreRing = ({ score, size = 180 }) => {
   const [animatedScore, setAnimatedScore] = useState(0);
+  const safeScore = Number.isFinite(Number(score)) ? Math.max(0, Math.min(100, Number(score))) : 0;
   const radius = (size - 20) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (animatedScore / 100) * circumference;
@@ -20,10 +21,10 @@ const ScoreRing = ({ score, size = 180 }) => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setAnimatedScore(score);
+      setAnimatedScore(safeScore);
     }, 200);
     return () => clearTimeout(timer);
-  }, [score]);
+  }, [safeScore]);
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
@@ -66,7 +67,7 @@ const ScoreRing = ({ score, size = 180 }) => {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={getGradient(score)}
+          stroke={getGradient(safeScore)}
           strokeWidth="10"
           fill="none"
           strokeLinecap="round"
@@ -85,7 +86,7 @@ const ScoreRing = ({ score, size = 180 }) => {
             cx={size / 2 + Math.cos((animatedScore / 100) * 2 * Math.PI - Math.PI / 2 + (i * 0.1)) * radius}
             cy={size / 2 + Math.sin((animatedScore / 100) * 2 * Math.PI - Math.PI / 2 + (i * 0.1)) * radius}
             r="2"
-            fill={getColor(score)}
+            fill={getColor(safeScore)}
             opacity={1 - (i * 0.3)}
             className="animate-pulse"
             style={{ animationDelay: `${i * 0.2}s` }}
@@ -106,7 +107,7 @@ const ScoreRing = ({ score, size = 180 }) => {
       </div>
       
       {/* Floating particles */}
-      {score >= 80 && (
+      {safeScore >= 80 && (
         <div className="absolute inset-0 pointer-events-none">
           {[...Array(6)].map((_, i) => (
             <div

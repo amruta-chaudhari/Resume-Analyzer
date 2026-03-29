@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAnalyses } from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
+import { formatDateTime } from '../utils/dateFormat';
 
 const AnalysisHistory = () => {
   const navigate = useNavigate();
@@ -34,16 +35,6 @@ const AnalysisHistory = () => {
 
   const handleViewAnalysis = (analysisId) => {
     navigate(`/analysis/${analysisId}`);
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   if (loading) {
@@ -96,7 +87,7 @@ const AnalysisHistory = () => {
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
                       {analysis.jobTitle || 'Untitled Analysis'}
                     </h3>
-                    {analysis.overallScore && (
+                    {analysis.overallScore != null && (
                       <div className={`px-3 py-1 rounded-full text-sm font-medium ${
                         analysis.overallScore >= 80 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
                         analysis.overallScore >= 60 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
@@ -111,7 +102,7 @@ const AnalysisHistory = () => {
                       <span className="font-medium">Resume:</span> {analysis.resume?.title || 'N/A'}
                     </div>
                     <div>
-                      <span className="font-medium">Date:</span> {formatDate(analysis.createdAt)}
+                      <span className="font-medium">Date:</span> {formatDateTime(analysis.createdAt)}
                     </div>
                     <div>
                       <span className="font-medium">Model:</span> {analysis.modelUsed || 'N/A'}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ScoreRing from './ScoreRing';
 import KeywordAnalysis from './KeywordAnalysis';
 import ExperienceRelevance from './ExperienceRelevance';
@@ -8,6 +8,8 @@ import EmptyState from './EmptyState';
 import { downloadResumeFile } from '../services/api';
 
 const AnalysisResults = ({ results }) => {
+  const [downloadStatus, setDownloadStatus] = useState('');
+
   if (!results) {
     return <EmptyState />;
   }
@@ -16,23 +18,66 @@ const AnalysisResults = ({ results }) => {
     try {
       if (results.resume && results.resume.id) {
         await downloadResumeFile(results.resume.id, results.resume.title || `resume-${results.resume.id}`);
+        setDownloadStatus('Resume download started.');
       }
     } catch (error) {
       console.error('Failed to download resume:', error);
-      // You could add a toast notification here
+      setDownloadStatus('Failed to download the original resume file.');
     }
   };
 
   const getScoreText = (score) => {
-    if (score >= 80) return { text: 'Excellent', color: 'from-green-400 to-emerald-500', emoji: '🎉' };
-    if (score >= 60) return { text: 'Good', color: 'from-yellow-400 to-orange-500', emoji: '👍' };
-    return { text: 'Needs Improvement', color: 'from-red-400 to-pink-500', emoji: '💪' };
+    if (score >= 80) return { text: 'Excellent', color: 'from-green-400 to-emerald-500' };
+    if (score >= 60) return { text: 'Good', color: 'from-yellow-400 to-orange-500' };
+    return { text: 'Needs Improvement', color: 'from-red-400 to-pink-500' };
   };
 
   const scoreInfo = getScoreText(results.overallScore);
+  const scoreBreakdown = results.scoringBreakdown;
+  const modelUsed = typeof results.modelUsed === 'object' ? results.modelUsed : null;
 
   return (
     <div className="space-y-8">
+      <div className="glass-strong rounded-3xl p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Model</p>
+            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{modelUsed?.name || 'Analysis model unavailable'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{modelUsed?.provider || results.aiProvider || 'Unknown provider'}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Method</p>
+            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{results.analysisMethod || 'LLM analysis'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Hybrid scoring + grounded recommendations</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Tokens</p>
+            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{results.tokensUsed || 0}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Prompt {results.promptTokens || 0} / Completion {results.completionTokens || 0}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Estimated Cost</p>
+            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{results.estimatedCost || 'n/a'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Processing time {results.processingTime || 0} ms</p>
+          </div>
+        </div>
+
+        {results.analysisWarnings?.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+            <p className="font-semibold">Analysis Warnings</p>
+            <ul className="mt-2 space-y-1">
+              {results.analysisWarnings.map((warning, index) => (
+                <li key={index}>- {warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {downloadStatus && (
+          <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">{downloadStatus}</div>
+        )}
+      </div>
+
       {/* Row 1: Overall Match Score and Keyword Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Overall Score */}
@@ -56,16 +101,13 @@ const AnalysisResults = ({ results }) => {
           <div className="flex flex-col items-center justify-center space-y-6">
             <div className="relative">
               <ScoreRing score={results.overallScore} />
-              <div className="absolute -top-2 -right-2">
-                <span className="text-2xl">{scoreInfo.emoji}</span>
-              </div>
             </div>
             <div className="text-center space-y-3">
               <div className={`inline-flex items-center px-6 py-3 rounded-full bg-gradient-to-r ${scoreInfo.color} text-white font-semibold text-lg shadow-lg`}>
                 {scoreInfo.text} Match
               </div>
               <p className="text-gray-600 dark:text-gray-300 max-w-sm mx-auto leading-relaxed">
-                Your resume shows a <strong>{scoreInfo.text.toLowerCase()}</strong> alignment with this position. 
+                Your resume shows a <strong>{scoreInfo.text.toLowerCase()}</strong> alignment with this position.
                 {results.overallScore >= 80 && " You're well-positioned for this role!"}
                 {results.overallScore >= 60 && results.overallScore < 80 && " Some improvements could boost your chances."}
                 {results.overallScore < 60 && " Focus on the suggestions below to improve your match."}
@@ -91,9 +133,23 @@ const AnalysisResults = ({ results }) => {
               <div className="text-2xl font-bold text-green-500 dark:text-green-400">
                 {results.experienceRelevance?.score || 0}%
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-300">Strong Matches</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">Experience Relevance</div>
             </div>
           </div>
+
+          {scoreBreakdown && (
+            <div className="mt-6 rounded-2xl border border-white/20 bg-white/60 p-4 dark:bg-slate-900/50">
+              <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Scoring Breakdown</h4>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 text-sm text-gray-700 dark:text-gray-200">
+                <div>Keyword Score: <span className="font-semibold">{scoreBreakdown.skills}</span> ({Math.round((scoreBreakdown.weights.skills || 0) * 100)}%)</div>
+                <div>Experience Score: <span className="font-semibold">{scoreBreakdown.experience}</span> ({Math.round((scoreBreakdown.weights.experience || 0) * 100)}%)</div>
+                <div>Formatting Score: <span className="font-semibold">{scoreBreakdown.formatting}</span> ({Math.round((scoreBreakdown.weights.formatting || 0) * 100)}%)</div>
+              </div>
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Keyword coverage {Math.round((scoreBreakdown.keywordCoverage || 0) * 100)}% • Experience keyword coverage {Math.round((scoreBreakdown.experienceKeywordCoverage || 0) * 100)}%
+              </div>
+            </div>
+          )}
         </div>
 
         <KeywordAnalysis analysis={results.skillsAnalysis} />
