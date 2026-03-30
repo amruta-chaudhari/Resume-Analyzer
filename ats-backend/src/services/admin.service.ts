@@ -599,6 +599,124 @@ export class AdminService {
     });
   }
 
+  async bulkUpdateUsers(
+    userIds: string[],
+    input: UpdateUserInput,
+    auditContext: AdminAuditContext
+  ) {
+    const normalizedUserIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (normalizedUserIds.length === 0) {
+      throw new Error('At least one user is required');
+    }
+
+    const results = [] as Array<{ userId: string; success: boolean; error?: string }>;
+    for (const userId of normalizedUserIds) {
+      try {
+        await this.updateUser(userId, input, auditContext);
+        results.push({ userId, success: true });
+      } catch (error) {
+        results.push({
+          userId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Bulk update failed',
+        });
+      }
+    }
+
+    return {
+      success: true,
+      total: normalizedUserIds.length,
+      succeeded: results.filter((item) => item.success).length,
+      failed: results.filter((item) => !item.success).length,
+      results,
+    };
+  }
+
+  async bulkRevokeUserSessions(userIds: string[], auditContext: AdminAuditContext) {
+    const normalizedUserIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (normalizedUserIds.length === 0) {
+      throw new Error('At least one user is required');
+    }
+
+    const results = [] as Array<{ userId: string; success: boolean; revokedSessions?: number; error?: string }>;
+    for (const userId of normalizedUserIds) {
+      try {
+        const result = await this.revokeUserSessions(userId, auditContext);
+        results.push({ userId, success: true, revokedSessions: result.revokedSessions });
+      } catch (error) {
+        results.push({
+          userId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Bulk revoke failed',
+        });
+      }
+    }
+
+    return {
+      success: true,
+      total: normalizedUserIds.length,
+      succeeded: results.filter((item) => item.success).length,
+      failed: results.filter((item) => !item.success).length,
+      results,
+    };
+  }
+
+  async adminDeleteResume(userId: string, resumeId: string, auditContext: AdminAuditContext) {
+    return this.runTransaction(async (tx) => {
+      await this.requireUser(tx, userId);
+      const resume = await tx.resume.findFirst({
+        where: { id: resumeId, userId },
+        select: { id: true, title: true, deletedAt: true },
+      });
+
+      if (!resume) {
+        throw new NotFoundError('Resume', resumeId);
+      }
+
+      await tx.resume.update({
+        where: { id: resume.id },
+        data: { deletedAt: new Date() },
+      });
+
+      await this.createAuditLog(tx, auditContext, {
+        action: 'ADMIN_RESUME_DELETED',
+        entityType: 'resume',
+        entityId: resume.id,
+        changes: { userId, title: resume.title },
+      });
+
+      return { success: true, resumeId: resume.id };
+    });
+  }
+
+  async adminDeleteJobDescription(userId: string, jobDescriptionId: string, auditContext: AdminAuditContext) {
+    return this.runTransaction(async (tx) => {
+      await this.requireUser(tx, userId);
+      const jobDescription = await tx.jobDescription.findFirst({
+        where: { id: jobDescriptionId, userId },
+        select: { id: true, title: true, deletedAt: true },
+      });
+
+      if (!jobDescription) {
+        throw new NotFoundError('Job description', jobDescriptionId);
+      }
+
+      await tx.jobDescription.update({
+        where: { id: jobDescription.id },
+        data: { deletedAt: new Date() },
+      });
+
+      await this.createAuditLog(tx, auditContext, {
+        action: 'ADMIN_JOB_DESCRIPTION_DELETED',
+        entityType: 'job_description',
+        entityId: jobDescription.id,
+        changes: { userId, title: jobDescription.title },
+      });
+
+      return { success: true, jobDescriptionId: jobDescription.id };
+    });
+  }
+
   private normalizeUpdateInput(input: UpdateUserInput) {
     const normalized: UpdateUserInput = {};
 

@@ -21,6 +21,8 @@ const AdminUsersPage = () => {
   const [pageSize, setPageSize] = useState(25);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const totalUsers = pagination?.total || 0;
   const totalPages = Math.max(1, pagination?.totalPages || 1);
@@ -52,6 +54,7 @@ const AdminUsersPage = () => {
 
       setUsers(result.users);
       setPagination(result.pagination);
+      setSelectedUserIds((previous) => previous.filter((userId) => result.users.some((user) => user.id === userId)));
     } catch (error) {
       setErrorMessage(error.message || 'Failed to load users.');
       setUsers([]);
@@ -75,6 +78,59 @@ const AdminUsersPage = () => {
     }
 
     setCurrentPage(nextPage);
+  };
+
+  const toggleUserSelection = (userId) => {
+    setSelectedUserIds((previous) =>
+      previous.includes(userId)
+        ? previous.filter((id) => id !== userId)
+        : [...previous, userId]
+    );
+  };
+
+  const selectAllVisible = () => {
+    setSelectedUserIds(users.map((user) => user.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedUserIds([]);
+  };
+
+  const applyBulkUpdate = async (payload, confirmMessage) => {
+    if (selectedUserIds.length === 0) {
+      return;
+    }
+    if (confirmMessage && !window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setBulkLoading(true);
+      await adminService.bulkUpdateUsers({ userIds: selectedUserIds, ...payload });
+      await loadUsers();
+      clearSelection();
+    } catch (error) {
+      setErrorMessage(error.message || 'Bulk user update failed.');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkRevokeSessions = async () => {
+    if (selectedUserIds.length === 0 || !window.confirm('Revoke all active sessions for the selected users?')) {
+      return;
+    }
+
+    try {
+      setBulkLoading(true);
+      await adminService.bulkRevokeUserSessions(selectedUserIds);
+      await loadUsers();
+      clearSelection();
+    } catch (error) {
+      setErrorMessage(error.message || 'Bulk session revoke failed.');
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   return (
@@ -131,6 +187,36 @@ const AdminUsersPage = () => {
             </p>
           </div>
 
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {selectedUserIds.length} selected
+            </span>
+            <button type="button" onClick={selectAllVisible} className="rounded-xl border border-slate-300/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              Select page
+            </button>
+            <button type="button" onClick={clearSelection} className="rounded-xl border border-slate-300/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              Clear
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ role: 'ADMIN' }, 'Grant ADMIN role to selected users?')} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Make ADMIN
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ role: 'USER' }, 'Set selected users back to USER role?')} className="rounded-xl bg-slate-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Make USER
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ emailVerified: true }, 'Mark selected users as email verified?')} className="rounded-xl bg-green-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Verify Email
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={handleBulkRevokeSessions} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-semibold text-slate-950 disabled:opacity-40">
+              Revoke Sessions
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ deleted: true }, 'Soft-delete selected users?')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Soft Delete
+            </button>
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ deleted: false }, 'Restore selected users?')} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Restore
+            </button>
+          </div>
+
           <div className="mt-4 space-y-3">
             {loadingUsers && (
               <div className="rounded-2xl border border-dashed border-slate-300/80 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
@@ -155,11 +241,20 @@ const AdminUsersPage = () => {
                   className="w-full rounded-2xl border border-slate-200/80 bg-white p-4 text-left transition hover:border-cyan-400 hover:bg-cyan-50/40 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-cyan-600 dark:hover:bg-slate-800/70"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedUserIds.includes(user.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => toggleUserSelection(user.id)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                      />
+                      <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{user.email}</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {[user.firstName, user.lastName].filter(Boolean).join(' ') || 'No name set'}
                       </p>
+                    </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-1">

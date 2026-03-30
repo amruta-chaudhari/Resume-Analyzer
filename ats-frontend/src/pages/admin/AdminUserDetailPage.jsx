@@ -255,6 +255,38 @@ const AdminUserDetailPage = () => {
     }
   };
 
+  const handleDeleteResume = async (resumeId) => {
+    if (!window.confirm('Delete this resume from the user library?')) {
+      return;
+    }
+
+    try {
+      setErrorMessage('');
+      setSuccessMessage('');
+      await adminService.deleteUserResume(userId, resumeId);
+      await loadUserDetail(userId);
+      setSuccessMessage('Resume deleted.');
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to delete resume.');
+    }
+  };
+
+  const handleDeleteJobDescription = async (jobDescriptionId) => {
+    if (!window.confirm('Delete this job description from the user library?')) {
+      return;
+    }
+
+    try {
+      setErrorMessage('');
+      setSuccessMessage('');
+      await adminService.deleteUserJobDescription(userId, jobDescriptionId);
+      await loadUserDetail(userId);
+      setSuccessMessage('Job description deleted.');
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to delete job description.');
+    }
+  };
+
   if (loading) {
     return (
       <div className={`${adminCardClass} text-center text-sm text-slate-500 dark:text-slate-400`}>
@@ -709,7 +741,16 @@ const AdminUserDetailPage = () => {
               <div key={resume.id} className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold text-slate-900 dark:text-white">{resume.title}</p>
-                  <span className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{resume.status}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{resume.status}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteResume(resume.id)}
+                      className="rounded-xl bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:bg-red-900/20 dark:text-red-200"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Updated {formatDateTime(resume.updatedAt)}</p>
               </div>
@@ -725,7 +766,16 @@ const AdminUserDetailPage = () => {
             )}
             {userDetail.recentJobDescriptions.map((jobDescription) => (
               <div key={jobDescription.id} className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/70">
-                <p className="font-semibold text-slate-900 dark:text-white">{jobDescription.title}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-slate-900 dark:text-white">{jobDescription.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteJobDescription(jobDescription.id)}
+                    className="rounded-xl bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:bg-red-900/20 dark:text-red-200"
+                  >
+                    Delete
+                  </button>
+                </div>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                   {jobDescription.company || 'No company'} - {jobDescription.location || 'No location'}
                 </p>

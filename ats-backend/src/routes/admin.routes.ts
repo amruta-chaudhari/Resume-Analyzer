@@ -3,6 +3,7 @@ import { body, query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { AdminRequest, adminMiddleware } from '../middleware/admin.middleware';
 import { AdminService } from '../services/admin.service';
+import { llmUsageService } from '../services/llm-usage.service';
 import { AppError } from '../utils/errors';
 
 const router: Router = Router();
@@ -29,6 +30,26 @@ const getAuditContext = (req: AdminRequest) => ({
 });
 
 router.use(authMiddleware, adminMiddleware);
+
+router.get('/analytics/llm', async (req: AdminRequest, res: Response) => {
+  try {
+    const from = typeof req.query.from === 'string' ? new Date(req.query.from) : undefined;
+    const to = typeof req.query.to === 'string' ? new Date(req.query.to) : undefined;
+
+    const result = await llmUsageService.getAdminAnalytics({
+      from: from && !Number.isNaN(from.getTime()) ? from : undefined,
+      to: to && !Number.isNaN(to.getTime()) ? to : undefined,
+      provider: typeof req.query.provider === 'string' ? req.query.provider : undefined,
+      model: typeof req.query.model === 'string' ? req.query.model : undefined,
+      feature: typeof req.query.feature === 'string' ? req.query.feature : undefined,
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return sendAdminError(res, error, 'Failed to load LLM analytics');
+  }
+});
 
 router.get(
   '/users',
@@ -159,6 +180,76 @@ router.post('/users/:userId/revoke-sessions', async (req: AdminRequest, res: Res
     });
   } catch (error) {
     return sendAdminError(res, error, 'Failed to revoke sessions');
+  }
+});
+
+router.post(
+  '/users/bulk-update',
+  [
+    body('userIds').isArray({ min: 1 }),
+    body('userIds.*').isString().isLength({ min: 1 }),
+    body('role').optional().isIn(USER_ROLES),
+    body('subscriptionTier').optional().isLength({ min: 1, max: 50 }),
+    body('emailVerified').optional().isBoolean(),
+    body('deleted').optional().isBoolean(),
+  ],
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Invalid input', details: errors.array() });
+      }
+
+      const result = await adminService.bulkUpdateUsers(
+        req.body.userIds,
+        req.body,
+        getAuditContext(req)
+      );
+
+      return res.json({ success: true, data: result });
+    } catch (error) {
+      return sendAdminError(res, error, 'Failed to bulk update users');
+    }
+  }
+);
+
+router.post(
+  '/users/bulk-revoke-sessions',
+  [body('userIds').isArray({ min: 1 }), body('userIds.*').isString().isLength({ min: 1 })],
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Invalid input', details: errors.array() });
+      }
+
+      const result = await adminService.bulkRevokeUserSessions(req.body.userIds, getAuditContext(req));
+      return res.json({ success: true, data: result });
+    } catch (error) {
+      return sendAdminError(res, error, 'Failed to bulk revoke sessions');
+    }
+  }
+);
+
+router.delete('/users/:userId/resumes/:resumeId', async (req: AdminRequest, res: Response) => {
+  try {
+    const result = await adminService.adminDeleteResume(req.params.userId, req.params.resumeId, getAuditContext(req));
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return sendAdminError(res, error, 'Failed to delete resume');
+  }
+});
+
+router.delete('/users/:userId/job-descriptions/:jobDescriptionId', async (req: AdminRequest, res: Response) => {
+  try {
+    const result = await adminService.adminDeleteJobDescription(
+      req.params.userId,
+      req.params.jobDescriptionId,
+      getAuditContext(req)
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return sendAdminError(res, error, 'Failed to delete job description');
   }
 });
 

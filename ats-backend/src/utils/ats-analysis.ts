@@ -44,6 +44,49 @@ const TECH_PHRASE_REGEX =
 const EXPLICIT_KEYWORD_SEGMENT_REGEX =
   /(?:experience with|experienced with|proficient in|knowledge of|expertise in|familiarity with|skills? in|technologies?:|tools?:|stack:|requirements?:|must have|nice to have|preferred:)([^\n.;]+)/gi;
 
+const HTML_ENTITY_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/&amp;amp;#x2f;|&#x2f;|&#47;/gi, '/'],
+  [/&amp;amp;|&amp;/gi, '&'],
+  [/&quot;/gi, '"'],
+  [/&apos;/gi, "'"],
+  [/&lt;/gi, '<'],
+  [/&gt;/gi, '>'],
+  [/&nbsp;/gi, ' '],
+];
+
+const STRATEGIC_KEYWORD_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'TypeScript', pattern: /\btypescript\b/i },
+  { label: 'JavaScript', pattern: /\bjavascript\b/i },
+  { label: 'React', pattern: /\breact(?:\.js)?\b/i },
+  { label: 'Node.js', pattern: /\bnode(?:\.js)?\b/i },
+  { label: 'GraphQL', pattern: /\bgraphql\b/i },
+  { label: 'AWS', pattern: /\baws|amazon web services\b/i },
+  { label: 'Azure', pattern: /\bazure\b/i },
+  { label: 'Docker', pattern: /\bdocker\b/i },
+  { label: 'Kubernetes', pattern: /\bkubernetes\b/i },
+  { label: 'Terraform', pattern: /\bterraform\b/i },
+  { label: 'Helm', pattern: /\bhelm\b/i },
+  { label: 'Grafana', pattern: /\bgrafana\b/i },
+  { label: 'Keycloak', pattern: /\bkeycloak\b/i },
+  { label: 'Vue', pattern: /\bvue(?:\.js)?\b/i },
+  { label: 'Nuxt', pattern: /\bnuxt(?:\.js)?\b/i },
+  { label: 'Design Patterns', pattern: /\bdesign patterns?\b/i },
+  { label: 'Coding Techniques', pattern: /\bcoding techniques?\b/i },
+  { label: 'Agile Practices', pattern: /\bagile|sprint planning|story decomposition|estimation\b/i },
+  { label: 'SDLC', pattern: /\bsdlc|software development lifecycle\b/i },
+  { label: 'Engineering Standards', pattern: /\bengineering standards?|coding standards?\b/i },
+  { label: 'Code Reviews', pattern: /\bcode reviews?\b/i },
+  { label: 'Unit Testing', pattern: /\bunit tests?\b/i },
+  { label: 'Integration Testing', pattern: /\bintegration tests?\b/i },
+  { label: 'End-to-End Testing', pattern: /\bend-to-end|e2e tests?\b/i },
+  { label: 'Mentoring', pattern: /\bmentor(?:ing)?|coach(?:ing)?\b/i },
+  { label: 'Technical Leadership', pattern: /\btechnical lead|leadership|architectural design|decision-making\b/i },
+  { label: 'LLM Supervision', pattern: /\bllm|prompting|semi-autonomous coding\b/i },
+  { label: 'Product Management', pattern: /\bproduct management\b/i },
+  { label: 'Quality Assurance', pattern: /\bquality assurance\b/i },
+  { label: 'Compliance', pattern: /\bcompliance|information security|security policies\b/i },
+];
+
 const TOKEN_REGEX = /[A-Za-z][A-Za-z0-9.+#/-]{1,24}/g;
 const MONTH_PATTERN = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
 const DATE_TOKEN_SOURCE = `${MONTH_PATTERN}\\s+\\d{4}|(?<!\\d)(?:0?[1-9]|1[0-2])[/-]\\d{4}(?!\\d)|(?<!\\d)\\d{4}[/-](?:0?[1-9]|1[0-2])(?!\\d)|(?<![\\d-])\\b\\d{4}\\b(?!-\\d{2,4})|present|current|now`;
@@ -92,6 +135,7 @@ const KEYWORD_STOPWORDS = new Set([
   'company',
   'coordinate',
   'create',
+  'cto',
   'customer',
   'demonstrated',
   'design',
@@ -108,12 +152,14 @@ const KEYWORD_STOPWORDS = new Set([
   'help',
   'high',
   'ideal',
+  'inc',
   'in',
   'including',
   'into',
   'is',
   'it',
   'job',
+  'jobs',
   'knowledge',
   'looking',
   'maintain',
@@ -126,6 +172,7 @@ const KEYWORD_STOPWORDS = new Set([
   'or',
   'our',
   'partner',
+  'perimetrics',
   'preferred',
   'problem',
   'problems',
@@ -133,15 +180,18 @@ const KEYWORD_STOPWORDS = new Set([
   'product',
   'quality',
   'requirements',
+  'responsibilities',
   'responsible',
   'role',
   'self',
   'skills',
   'software',
+  'standards',
   'solutions',
   'strong',
   'student',
   'support',
+  'systematic',
   'team',
   'teams',
   'that',
@@ -152,6 +202,7 @@ const KEYWORD_STOPWORDS = new Set([
   'to',
   'tools',
   'using',
+  'velocity',
   'we',
   'well',
   'with',
@@ -162,6 +213,15 @@ const KEYWORD_STOPWORDS = new Set([
   'year',
   'you',
   'your',
+  'title',
+  'description',
+  'location',
+  'reporting',
+  'overview',
+  'qualification',
+  'qualifications',
+  'innerview',
+  'redmond',
 ]);
 
 const SYNONYM_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -202,6 +262,14 @@ const normalizeForMatching = (input: string): string => {
 };
 
 const dedupeStrings = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const decodeHtmlEntities = (input: string) => {
+  let output = input;
+  for (const [pattern, replacement] of HTML_ENTITY_REPLACEMENTS) {
+    output = output.replace(pattern, replacement);
+  }
+  return output;
+};
 
 const classifyDateStyle = (raw: string): string => {
   if (/^(?:present|current|now)$/i.test(raw)) {
@@ -349,9 +417,43 @@ const buildRecommendationsFromMissingKeywords = (missingKeywords: string[]) => {
     return ['Keep your Technical Skills section aligned to the strongest job keywords already present.'];
   }
 
-  return missingKeywords.slice(0, 4).map(
-    (keyword) => `Add concrete evidence for ${keyword} in your Technical Skills or Experience section if you have real hands-on exposure.`
+  const normalizedKeywords = missingKeywords.map((keyword) => normalizeForMatching(keyword));
+  const recommendations: string[] = [];
+
+  const hasTechGap = normalizedKeywords.some((keyword) =>
+    ['react', 'ts', 'js', 'nodejs', 'graphql', 'aws', 'azure', 'docker', 'kubernetes', 'terraform', 'helm', 'grafana', 'keycloak', 'vue', 'nuxt'].includes(keyword)
   );
+  const hasTestingGap = normalizedKeywords.some((keyword) =>
+    ['unit testing', 'integration testing', 'end to end testing', 'code reviews'].includes(keyword)
+  );
+  const hasLeadershipGap = normalizedKeywords.some((keyword) =>
+    ['mentoring', 'technical leadership', 'product management', 'quality assurance'].includes(keyword)
+  );
+  const hasProcessGap = normalizedKeywords.some((keyword) =>
+    ['sdlc', 'agile practices', 'engineering standards', 'design patterns', 'coding techniques', 'llm supervision', 'compliance'].includes(keyword)
+  );
+
+  if (hasTechGap) {
+    recommendations.push('Move your strongest stack match into the most visible Technical Skills and Experience bullets, and only add missing technologies you can genuinely explain in interviews.');
+  }
+
+  if (hasTestingGap) {
+    recommendations.push('If you owned testing or review quality, add explicit bullets for unit, integration, or end-to-end testing and code/design review participation instead of leaving that implied.');
+  }
+
+  if (hasLeadershipGap) {
+    recommendations.push('Surface mentoring, cross-team collaboration, or technical leadership examples if you have them, even if they were informal responsibilities.');
+  }
+
+  if (hasProcessGap) {
+    recommendations.push('Make your engineering process visible by naming concrete design patterns, SDLC responsibilities, agile practices, or compliance/security ownership that you actually used.');
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push(`Add clearer evidence for ${missingKeywords.slice(0, 3).join(', ')} in your Technical Skills or Experience section if you have real hands-on exposure.`);
+  }
+
+  return recommendations.slice(0, 4);
 };
 
 const hasWholePhraseMatch = (normalizedText: string, rawKeyword: string): boolean => {
@@ -366,7 +468,43 @@ const hasWholePhraseMatch = (normalizedText: string, rawKeyword: string): boolea
 
 const extractKeywords = (jobDescription: string): string[] => {
   const candidates: string[] = [];
-  const source = jobDescription || '';
+  const source = decodeHtmlEntities(jobDescription || '');
+
+  for (const { label, pattern } of STRATEGIC_KEYWORD_PATTERNS) {
+    if (pattern.test(source)) {
+      candidates.push(label);
+    }
+  }
+
+  const lines = source
+    .split('\n')
+    .map((line) => line.replace(/^\s*[•*-]\s*/, '').trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const normalizedLine = normalizeForMatching(line);
+    if (
+      !normalizedLine ||
+      /^(company overview|job overview|required qualifications|preferred qualifications|key responsibilities|job title|location|reporting to)$/.test(normalizedLine)
+    ) {
+      continue;
+    }
+
+    if (line.length <= 80 && /[:,/()]/.test(line)) {
+      line
+        .split(/,|\/|\|| and | or /i)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((item) => candidates.push(item));
+    }
+
+    if (
+      line.length <= 70 &&
+      /\b(?:React|Node|TypeScript|JavaScript|AWS|Azure|Docker|Kubernetes|GraphQL|Terraform|Helm|Grafana|Keycloak|Vue|Nuxt|SDLC|LLM|Agile|design patterns|code reviews|unit|integration|end-to-end)\b/i.test(line)
+    ) {
+      candidates.push(line);
+    }
+  }
 
   for (const match of source.matchAll(EXPLICIT_KEYWORD_SEGMENT_REGEX)) {
     const segment = match[1] || '';
@@ -397,11 +535,22 @@ const extractKeywords = (jobDescription: string): string[] => {
   const deduped = new Map<string, string>();
   for (const candidate of candidates) {
     const cleaned = candidate
+      .replace(/^job title[:\s-]*/i, '')
+      .replace(/^location[:\s-]*/i, '')
+      .replace(/^reporting to[:\s-]*/i, '')
       .replace(/[()]/g, ' ')
+      .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
       .replace(/\s+/g, ' ')
       .trim();
     const normalized = normalizeForMatching(cleaned);
-    if (!normalized || normalized.length < 2 || KEYWORD_STOPWORDS.has(normalized)) {
+    if (
+      !normalized ||
+      normalized.length < 2 ||
+      normalized.length > 36 ||
+      cleaned.split(' ').length > 6 ||
+      /^\d/.test(cleaned) ||
+      KEYWORD_STOPWORDS.has(normalized)
+    ) {
       continue;
     }
     if (!deduped.has(normalized)) {
@@ -409,7 +558,7 @@ const extractKeywords = (jobDescription: string): string[] => {
     }
   }
 
-  return Array.from(deduped.values()).slice(0, 18);
+  return Array.from(deduped.values()).slice(0, 16);
 };
 
 const evaluateKeywordMatch = (resumeText: string, jobDescription: string): KeywordMatch => {
@@ -507,7 +656,7 @@ const evaluateExperienceRelevance = (
     gaps.push('Use clear date ranges for each role so ATS systems can understand your timeline.');
   }
   if (keywordMatch.missingKeywords.length > 0) {
-    gaps.push(`Add or highlight experience related to ${keywordMatch.missingKeywords.slice(0, 3).join(', ')} if you have relevant exposure.`);
+    gaps.push(`Add or highlight direct evidence for ${keywordMatch.missingKeywords.slice(0, 3).join(', ')} if those are real parts of your experience.`);
   }
 
   let score = 25 + (matchedKeywordCoverage * 55);

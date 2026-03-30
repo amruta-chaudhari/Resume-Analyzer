@@ -62,6 +62,15 @@ export type LlmUsageSummary = {
   }>;
 };
 
+export type AdminLlmAnalyticsFilters = {
+  from?: Date;
+  to?: Date;
+  provider?: string;
+  model?: string;
+  feature?: string;
+  status?: string;
+};
+
 const getCurrentMonthUtcWindow = () => {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -240,6 +249,130 @@ export class LlmUsageService {
           totalCostUsd: roundUsd(entry.totalCostUsd),
         }))
         .sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount),
+    };
+  }
+
+  async getAdminAnalytics(filters: AdminLlmAnalyticsFilters = {}) {
+    const where: any = {};
+
+    if (filters.from || filters.to) {
+      where.createdAt = {};
+      if (filters.from) {
+        where.createdAt.gte = filters.from;
+      }
+      if (filters.to) {
+        where.createdAt.lte = filters.to;
+      }
+    }
+
+    if (filters.provider) {
+      where.aiProvider = filters.provider;
+    }
+    if (filters.model) {
+      where.model = filters.model;
+    }
+    if (filters.feature) {
+      where.feature = filters.feature;
+    }
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    const rows = await prisma.aiUsage.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        userId: true,
+        feature: true,
+        aiProvider: true,
+        model: true,
+        tokensUsed: true,
+        promptTokens: true,
+        completionTokens: true,
+        costUsd: true,
+        status: true,
+        responseTimeMs: true,
+        createdAt: true,
+      },
+    });
+
+    const overview = {
+      requests: rows.length,
+      completed: rows.filter((row) => (row.status || '').toLowerCase() === 'completed').length,
+      failed: rows.filter((row) => (row.status || '').toLowerCase() !== 'completed').length,
+      totalTokens: rows.reduce((sum, row) => sum + (row.tokensUsed || 0), 0),
+      promptTokens: rows.reduce((sum, row) => sum + (row.promptTokens || 0), 0),
+      completionTokens: rows.reduce((sum, row) => sum + (row.completionTokens || 0), 0),
+      totalCostUsd: roundUsd(rows.reduce((sum, row) => sum + (row.costUsd || 0), 0)),
+      avgLatencyMs: rows.length > 0
+        ? Math.round(rows.reduce((sum, row) => sum + (row.responseTimeMs || 0), 0) / rows.length)
+        : 0,
+    };
+
+    const groupMap = (getKey: (row: typeof rows[number]) => string, getLabel: (row: typeof rows[number]) => Record<string, unknown>) => {
+      const map = new Map<string, any>();
+      for (const row of rows) {
+        const key = getKey(row);
+        const entry = map.get(key) || {
+          ...getLabel(row),
+          requestCount: 0,
+          totalTokens: 0,
+          totalCostUsd: 0,
+          completed: 0,
+          failed: 0,
+        };
+        entry.requestCount += 1;
+        entry.totalTokens += row.tokensUsed || 0;
+        entry.totalCostUsd += row.costUsd || 0;
+        if ((row.status || '').toLowerCase() === 'completed') {
+          entry.completed += 1;
+        } else {
+          entry.failed += 1;
+        }
+        map.set(key, entry);
+      }
+      return Array.from(map.values()).map((entry) => ({
+        ...entry,
+        totalCostUsd: roundUsd(entry.totalCostUsd),
+      }));
+    };
+
+    const timeseriesMap = new Map<string, { date: string; requests: number; totalTokens: number; totalCostUsd: number }>();
+    for (const row of rows) {
+      const date = row.createdAt.toISOString().slice(0, 10);
+      const entry = timeseriesMap.get(date) || { date, requests: 0, totalTokens: 0, totalCostUsd: 0 };
+      entry.requests += 1;
+      entry.totalTokens += row.tokensUsed || 0;
+      entry.totalCostUsd += row.costUsd || 0;
+      timeseriesMap.set(date, entry);
+    }
+
+    return {
+      overview,
+      filters: {
+        from: filters.from?.toISOString() || null,
+        to: filters.to?.toISOString() || null,
+        provider: filters.provider || null,
+        model: filters.model || null,
+        feature: filters.feature || null,
+        status: filters.status || null,
+      },
+      timeseries: Array.from(timeseriesMap.values()).map((entry) => ({
+        ...entry,
+        totalCostUsd: roundUsd(entry.totalCostUsd),
+      })),
+      providerBreakdown: groupMap((row) => row.aiProvider || 'unknown', (row) => ({ provider: row.aiProvider || 'unknown' }))
+        .sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount),
+      modelBreakdown: groupMap((row) => `${row.aiProvider || 'unknown'}::${row.model || 'unknown'}`, (row) => ({
+        provider: row.aiProvider || 'unknown',
+        model: row.model || 'unknown',
+      })).sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount).slice(0, 20),
+      featureBreakdown: groupMap((row) => row.feature || 'unknown', (row) => ({ feature: row.feature || 'unknown' }))
+        .sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount),
+      userBreakdown: groupMap((row) => row.userId, (row) => ({ userId: row.userId }))
+        .sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount)
+        .slice(0, 20),
     };
   }
 }

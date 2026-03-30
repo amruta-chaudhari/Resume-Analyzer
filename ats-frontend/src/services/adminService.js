@@ -28,6 +28,31 @@ export const adminService = {
     return response.data.data;
   },
 
+  async bulkUpdateUsers(payload) {
+    const response = await apiClient.post('/api/admin/users/bulk-update', payload);
+    return response.data.data;
+  },
+
+  async bulkRevokeUserSessions(userIds) {
+    const response = await apiClient.post('/api/admin/users/bulk-revoke-sessions', { userIds });
+    return response.data.data;
+  },
+
+  async deleteUserResume(userId, resumeId) {
+    const response = await apiClient.delete(`/api/admin/users/${userId}/resumes/${resumeId}`);
+    return response.data.data;
+  },
+
+  async deleteUserJobDescription(userId, jobDescriptionId) {
+    const response = await apiClient.delete(`/api/admin/users/${userId}/job-descriptions/${jobDescriptionId}`);
+    return response.data.data;
+  },
+
+  async getLlmAnalytics(params = {}) {
+    const response = await apiClient.get('/api/admin/analytics/llm', { params });
+    return response.data.data;
+  },
+
   async getSystemSettings() {
     const response = await apiClient.get('/api/admin/settings');
     return response.data.data;

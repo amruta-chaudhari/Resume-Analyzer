@@ -139,10 +139,10 @@ const JobDescriptionManager = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
-              Job Description Manager
+              Job Description Library
             </h2>
             <p className="text-gray-600 dark:text-gray-400">
-              Save and manage job descriptions for quick access during analysis
+              Save and manage reusable job descriptions for quick access during analysis
             </p>
           </div>
           <button
