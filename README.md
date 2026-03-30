@@ -329,9 +329,10 @@ npm run test:coverage # Run backend tests with coverage
 npm run dev           # Start Vite dev server
 npm run build         # Build for production
 npm run preview       # Preview production build
+npm run test:unit     # Frontend unit tests (Vitest)
 npm run test:smoke    # Fast Playwright smoke suite (chromium)
 npm run test:integration # Playwright integration specs
-npm run test:ci       # CI test flow (smoke + integration)
+npm run test:ci       # CI test flow (unit + smoke + integration)
 ```
 
 ### Database Migrations
