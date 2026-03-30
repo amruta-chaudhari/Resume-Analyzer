@@ -1,7 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-const API_BASE_URL = env.PW_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = env.PW_API_BASE_URL || 'http://127.0.0.1:4010';
 
 const extractAccessToken = async (response: any) => {
   const body = await response.json();

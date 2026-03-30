@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('API Integration', () => {
-  const API_BASE_URL = 'http://localhost:3001';
+  const API_BASE_URL = process.env.PW_API_BASE_URL || 'http://127.0.0.1:4010';
 
   test('should connect to backend API', async ({ page }) => {
     const response = await page.goto(`${API_BASE_URL}/api/health`);

@@ -75,6 +75,7 @@ jobs:
       - name: Run frontend tests
         env:
           DISABLE_RATE_LIMITS: "true"
+          PW_API_BASE_URL: http://127.0.0.1:4010
         run: npm run test:ci
 
       - name: Security audit (frontend, non-blocking)
