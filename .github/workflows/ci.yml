@@ -73,6 +73,8 @@ jobs:
         run: npm run build
 
       - name: Run frontend tests
+        env:
+          DISABLE_RATE_LIMITS: "true"
         run: npm run test:ci
 
       - name: Security audit (frontend, non-blocking)
