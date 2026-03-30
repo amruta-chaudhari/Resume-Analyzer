@@ -90,3 +90,7 @@ ats-frontend/test-results/
 ats-frontend/playwright-report/
 ats-frontend/blob-report/
 
+KNOWLEDGE_ROOT.md
+ats-backend/KNOWLEDGE_BACKEND.md
+ats-backend/prisma/dev.db
+ats-frontend/KNOWLEDGE_FRONTEND.md

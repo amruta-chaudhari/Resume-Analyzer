@@ -213,9 +213,22 @@ VITE_API_URL=http://localhost:3001
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/analyze` | Analyze resume vs job description |
+| GET | `/api/analyses` | List analysis history for current user |
+| GET | `/api/analyses/:id` | Get a specific analysis record |
+| GET | `/api/analysis/:jobId/status` | Poll status of an analysis job |
+| GET | `/api/usage/summary` | Get usage statistics for current user |
 | GET | `/api/models` | List available AI models |
-| POST | `/api/models/refresh` | Refresh model cache |
+| POST | `/api/models/refresh` | Refresh model cache (admin) |
 | GET | `/api/health/upstream` | Admin upstream health check |
+
+### Job Descriptions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/job-descriptions` | List saved job descriptions |
+| POST | `/api/job-descriptions` | Create a new job description |
+| PUT | `/api/job-descriptions/:id` | Update an existing job description |
+| DELETE | `/api/job-descriptions/:id` | Delete a job description |
+| POST | `/api/job-descriptions/bulk-delete` | Bulk delete job descriptions |
 
 ### Resumes
 | Method | Endpoint | Description |

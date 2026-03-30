@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Test
         run: npm test -- --runInBand
 
@@ -53,3 +56,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Run frontend tests
+        run: npm test

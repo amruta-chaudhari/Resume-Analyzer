@@ -24,6 +24,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "playwright test",
     "test:tour": "playwright test tests/e2e/tour-presentation.spec.ts -g @tour",
     "test:tour:video": "playwright test tests/e2e/tour-presentation.spec.ts --project=chromium -g @tour-video",
     "presentation:pptx": "node scripts/build-presentation.mjs",

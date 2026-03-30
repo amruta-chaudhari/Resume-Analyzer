@@ -1,6 +1,6 @@
-# CLAUDE.md - ATS Resume Analyzer Project Guide
+# AGENTS.md - ATS Resume Analyzer Project Guide
 
-This document provides a comprehensive guide for AI assistants (like Claude) working on this codebase.
+This document provides a comprehensive guide for AI assistants (like Codex) working on this codebase.
 
 ## Project Overview
 
@@ -266,6 +266,7 @@ npm run preview           # Preview production build
 - `GET /` - List templates
 - `GET /:id` - Get template details
 - `POST /seed` - Seed default templates
+
 
 ### Authentication Flow
 - Login/Register returns access token (15min) + refresh token (7d)
