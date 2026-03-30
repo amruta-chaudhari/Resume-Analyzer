@@ -108,6 +108,32 @@ describe('Auth + Job description route integration', () => {
     expect(res.body.error).toMatch(/invalid credentials/i);
   });
 
+  it('POST /api/auth/register maps duplicate user to 409', async () => {
+    mockRegister.mockRejectedValueOnce(new Error('User already exists'));
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        email: 'student@example.com',
+        password: 'Password123!',
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/user already exists/i);
+  });
+
+  it('POST /api/auth/login validates malformed payload', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'not-an-email',
+        password: 'x',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid input/i);
+  });
+
   it('POST /api/auth/refresh validates required refreshToken', async () => {
     const res = await request(app)
       .post('/api/auth/refresh')
@@ -115,6 +141,69 @@ describe('Auth + Job description route integration', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/invalid input/i);
+  });
+
+  it('POST /api/auth/refresh maps invalid token to 401', async () => {
+    mockRefresh.mockRejectedValueOnce(new Error('Invalid refresh token'));
+
+    const res = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'bad-token' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/invalid refresh token/i);
+  });
+
+  it('GET /api/auth/me returns profile for authenticated user', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'student@example.com',
+      firstName: 'Student',
+      lastName: 'User',
+      role: 'USER',
+      subscriptionTier: 'free',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastLoginAt: null,
+    });
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.user.email).toBe('student@example.com');
+  });
+
+  it('GET /api/auth/me returns 404 when user no longer exists', async () => {
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/user not found/i);
+  });
+
+  it('POST /api/auth/logout allows missing refreshToken', async () => {
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockRevokeRefreshSession).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/logout validates refreshToken type', async () => {
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .send({ refreshToken: 123 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockRevokeRefreshSession).not.toHaveBeenCalled();
   });
 
   it('POST /api/job-descriptions rejects too-short description', async () => {
@@ -128,6 +217,57 @@ describe('Auth + Job description route integration', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/between 30 and 20000 characters/i);
+  });
+
+  it('POST /api/job-descriptions validates sourceUrl protocol', async () => {
+    const res = await request(app)
+      .post('/api/job-descriptions')
+      .set('Authorization', 'Bearer valid-token')
+      .send({
+        title: 'Software Engineer Intern',
+        description: 'A'.repeat(60),
+        sourceUrl: 'ftp://example.com/posting',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/source url/i);
+  });
+
+  it('GET /api/job-descriptions returns paginated results', async () => {
+    mockPrisma.jobDescription.findMany.mockResolvedValueOnce([
+      { id: 'jd-1', title: 'Role', description: 'A'.repeat(80), deletedAt: null },
+    ]);
+    mockPrisma.jobDescription.count.mockResolvedValueOnce(1);
+
+    const res = await request(app)
+      .get('/api/job-descriptions?page=1&limit=10')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.pagination.totalCount).toBe(1);
+    expect(res.body.data.jobDescriptions).toHaveLength(1);
+  });
+
+  it('PUT /api/job-descriptions/:id rejects empty update payload', async () => {
+    const res = await request(app)
+      .put('/api/job-descriptions/jd-1')
+      .set('Authorization', 'Bearer valid-token')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/at least one field is required/i);
+  });
+
+  it('DELETE /api/job-descriptions/:id returns 404 for missing record', async () => {
+    mockPrisma.jobDescription.findFirst.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .delete('/api/job-descriptions/jd-missing')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/job description not found/i);
   });
 
   it('POST /api/job-descriptions/bulk-delete validates ids list', async () => {
