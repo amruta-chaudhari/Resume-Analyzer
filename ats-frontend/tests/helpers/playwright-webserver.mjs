@@ -18,6 +18,10 @@ const backendPort = '4010';
 const serverUrl = `http://127.0.0.1:${backendPort}`;
 const require = createRequire(import.meta.url);
 
+process.env.JWT_SECRET ||= 'playwright-jwt-secret';
+process.env.JWT_REFRESH_SECRET ||= 'playwright-jwt-refresh-secret';
+process.env.DISABLE_RATE_LIMITS ||= 'true';
+
 let databaseRestored = false;
 let serverInstance = null;
 let isShuttingDown = false;

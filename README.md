@@ -41,7 +41,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 | Node.js + Express 5 | API Server |
 | TypeScript | Type Safety |
 | Prisma ORM | Database Access |
-| SQLite/PostgreSQL | Database |
+| SQLite (current Prisma schema/migrations) | Database |
 | JWT + bcrypt | Authentication |
 | OpenRouter API | AI Integration |
 | Puppeteer | PDF Generation |
@@ -110,7 +110,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
    cp .env.example .env
    # Edit .env with your settings (see Environment Variables below)
    
-   # Generate Prisma client and run migrations
+   # Generate Prisma client (dev startup runs db push via predev)
    npm run prisma:generate
    npm run prisma:migrate
    
@@ -131,7 +131,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
    ```
 
 4. **Open the app**
-   - Frontend: http://localhost:5173
+   - Frontend: http://localhost:3000
    - Backend API: http://localhost:3001
    - Health Check: http://localhost:3001/api/health
 
@@ -162,13 +162,11 @@ curl http://localhost:3000/api/health
 ### Backend (`ats-backend/.env`)
 
 ```env
-# Database (SQLite default, or PostgreSQL)
+# Database (current committed schema/migrations are SQLite)
 DATABASE_PROVIDER=sqlite
 DATABASE_URL=file:./dev.db
 
-# For PostgreSQL:
-# DATABASE_PROVIDER=postgresql
-# DATABASE_URL=postgresql://user:password@localhost:5432/ats_db
+# For PostgreSQL, you must update Prisma datasource + migration baseline first
 
 # JWT Secrets (generate your own!)
 JWT_SECRET=your-super-secret-jwt-key
@@ -237,9 +235,15 @@ VITE_API_URL=http://localhost:3001
 | POST | `/api/resumes` | Create resume |
 | GET | `/api/resumes/:id` | Get resume details |
 | PATCH | `/api/resumes/:id` | Update resume |
+| PUT | `/api/resumes/:id` | Update resume (full payload) |
 | DELETE | `/api/resumes/:id` | Delete resume |
+| POST | `/api/resumes/bulk-delete` | Bulk delete resumes |
 | POST | `/api/resumes/:id/analyze` | Analyze saved resume |
+| POST | `/api/resumes/parse` | Parse resume text |
+| POST | `/api/resumes/preview` | Generate resume preview |
+| GET | `/api/resumes/:id/preview` | Get saved resume preview |
 | GET | `/api/resumes/:id/file` | Download original file |
+| GET | `/api/resumes/:id/file/metadata` | Get original file metadata |
 | GET | `/api/resumes/:id/export/pdf` | Export as PDF |
 | GET | `/api/resumes/:id/export/word` | Export as Word |
 
@@ -248,6 +252,36 @@ VITE_API_URL=http://localhost:3001
 |--------|----------|-------------|
 | GET | `/api/templates` | List templates |
 | GET | `/api/templates/:id` | Get template |
+| POST | `/api/templates/seed` | Seed default templates (admin) |
+
+### Admin
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/users` | List users (admin) |
+| GET | `/api/admin/users/:userId` | Get user details (admin) |
+| PATCH | `/api/admin/users/:userId` | Update user fields (admin) |
+| POST | `/api/admin/users/:userId/password` | Reset user password (admin) |
+| POST | `/api/admin/users/:userId/revoke-sessions` | Revoke user sessions (admin) |
+| POST | `/api/admin/users/bulk-update` | Bulk update users (admin) |
+| POST | `/api/admin/users/bulk-revoke-sessions` | Bulk revoke sessions (admin) |
+| POST | `/api/admin/users/bulk-delete` | Bulk soft delete users (admin) |
+| DELETE | `/api/admin/users/:userId/resumes/:resumeId` | Delete a user resume (admin) |
+| DELETE | `/api/admin/users/:userId/job-descriptions/:jobDescriptionId` | Delete a user job description (admin) |
+| GET | `/api/admin/analytics/llm` | LLM analytics dashboard data (admin) |
+| GET | `/api/admin/settings` | Get system settings (admin) |
+| PATCH | `/api/admin/settings` | Update system settings (admin) |
+| GET | `/api/admin/models` | Get model/provider settings (admin) |
+
+### Operations
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/queue/stats` | Queue statistics (admin) |
+
+### Health
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | API service health check |
+| GET | `/api/health/upstream` | Upstream dependency health check (admin) |
 
 ---
 
@@ -286,6 +320,8 @@ npm run build         # Compile TypeScript
 npm start             # Run production build
 npm run prisma:studio # Open database GUI
 npm run prisma:migrate # Run migrations
+npm test              # Run backend tests
+npm run test:coverage # Run backend tests with coverage
 ```
 
 ### Frontend Commands
@@ -293,6 +329,9 @@ npm run prisma:migrate # Run migrations
 npm run dev           # Start Vite dev server
 npm run build         # Build for production
 npm run preview       # Preview production build
+npm run test:smoke    # Fast Playwright smoke suite (chromium)
+npm run test:integration # Playwright integration specs
+npm run test:ci       # CI test flow (smoke + integration)
 ```
 
 ### Database Migrations
@@ -338,7 +377,7 @@ npm run prisma:studio
 The backend serves both the API and the React frontend from a single process.
 
 ### Environment for Production
-- Use PostgreSQL instead of SQLite for better performance
+- Current repo migrations are SQLite-based; if moving to PostgreSQL, create and validate a PostgreSQL migration baseline before deploy
 - Set strong JWT secrets
 - Configure proper CORS origins
 - Use environment variables for all sensitive data

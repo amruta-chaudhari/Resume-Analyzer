@@ -21,6 +21,13 @@ dotenv.config({
   path: path.resolve(backendDir, '.env'),
 });
 
+const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET'] as const;
+const missingRequiredEnvVars = requiredEnvVars.filter((name) => !process.env[name]);
+
+if (missingRequiredEnvVars.length > 0) {
+  throw new Error(`Missing required environment variables for Playwright server: ${missingRequiredEnvVars.join(', ')}`);
+}
+
 export const createPlaywrightApp = () => {
   const app = express();
 

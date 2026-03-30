@@ -255,16 +255,24 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                           }
                         </p>
                         {(model.description?.length || 0) > (isMobile ? 120 : 260) && (
-                          <button
+                          <span
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => toggleDescription(model.id, e)}
-                            className={`text-xs mt-1 transition-colors duration-200 ${
-                              isSelected 
-                                ? 'text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300' 
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                toggleDescription(model.id, event);
+                              }
+                            }}
+                            className={`inline-block text-xs mt-1 transition-colors duration-200 ${
+                              isSelected
+                                ? 'text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300'
                                 : 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300'
                             }`}
+                            aria-label={expandedDescriptions.has(model.id) ? 'Collapse model description' : 'Expand model description'}
                           >
                             {expandedDescriptions.has(model.id) ? 'See less' : 'See more'}
-                          </button>
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">

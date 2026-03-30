@@ -22,7 +22,7 @@ This document provides a comprehensive guide for AI assistants (like Codex) work
 ### Backend (`/ats-backend`)
 - **Runtime**: Node.js with Express 5
 - **Language**: TypeScript
-- **Database**: SQLite (default) or PostgreSQL via Prisma ORM
+- **Database**: SQLite (current committed Prisma datasource and migrations)
 - **Authentication**: JWT (jsonwebtoken) + bcrypt
 - **File Processing**: 
   - `pdf-parse` for PDF text extraction
@@ -52,9 +52,13 @@ This document provides a comprehensive guide for AI assistants (like Codex) work
 │   ├── middleware/
 │   │   └── auth.middleware.ts # JWT authentication
 │   ├── routes/
-│   │   ├── ai.routes.ts       # /api/analyze, /api/models
+│   │   ├── analysis.routes.ts # /api/analyze, /api/analyses, /api/analysis/:jobId/status
+│   │   ├── models.routes.ts   # /api/models, /api/models/refresh
 │   │   ├── auth.routes.ts     # /api/auth/*
 │   │   ├── resume.routes.ts   # /api/resumes/*
+│   │   ├── job-descriptions.routes.ts # /api/job-descriptions/*
+│   │   ├── admin.routes.ts    # /api/admin/*
+│   │   ├── admin.settings.routes.ts # /api/admin/settings, /api/admin/models
 │   │   └── template.routes.ts # /api/templates/*
 │   └── services/
 │       ├── ai.service.ts       # OpenRouter AI integration
@@ -123,6 +127,8 @@ This document provides a comprehensive guide for AI assistants (like Codex) work
 
 ## API Endpoints
 
+Note: The authoritative endpoint list is in `## API Endpoints (Current)` below.
+
 ### Authentication (`/api/auth`)
 - `POST /register` - Create new user
 - `POST /login` - Authenticate user
@@ -157,8 +163,8 @@ This document provides a comprehensive guide for AI assistants (like Codex) work
 ### Backend (`.env`)
 ```env
 # Database
-DATABASE_PROVIDER=sqlite  # or postgresql
-DATABASE_URL=file:./dev.db  # or postgres connection string
+DATABASE_PROVIDER=sqlite
+DATABASE_URL=file:./dev.db
 
 # JWT
 JWT_SECRET=your-secret-key
@@ -192,6 +198,8 @@ npm run dev               # Start dev server (nodemon)
 npm run build             # Compile TypeScript
 npm start                 # Run production build
 ```
+
+`npm run dev` currently runs `prisma db push` via `predev`.
 
 ### Frontend
 ```bash
@@ -330,7 +338,7 @@ npm run preview           # Preview production build
 ## Testing & Debugging
 
 ### Backend
-- Health check: `GET /health`
+- Health check: `GET /api/health`
 - Check Prisma Studio: `npm run prisma:studio`
 - Logs appear in terminal during `npm run dev`
 

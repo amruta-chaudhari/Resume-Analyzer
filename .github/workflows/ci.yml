@@ -35,6 +35,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Security audit (backend, non-blocking)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -54,8 +58,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Setup backend dependencies for frontend tests
+        run: npm ci
+        working-directory: ats-backend
+
+      - name: Generate Prisma client for frontend test harness
+        run: npm run prisma:generate
+        working-directory: ats-backend
+
       - name: Build
         run: npm run build
 
       - name: Run frontend tests
-        run: npm test
+        env:
+          DISABLE_RATE_LIMITS: "true"
+          PW_API_BASE_URL: http://127.0.0.1:4010
+        run: npm run test:ci
+
+      - name: Security audit (frontend, non-blocking)
+        continue-on-error: true
+        run: npm audit --audit-level=high
