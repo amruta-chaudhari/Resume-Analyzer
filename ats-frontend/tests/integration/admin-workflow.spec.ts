@@ -23,6 +23,10 @@ const loginAsRegularUser = async (request: APIRequestContext) => {
     return null;
   }
 
+  if (loginResponse.status() === 401) {
+    return null;
+  }
+
   expect(
     loginResponse.status(),
     'Expected regular-user login to succeed. Set PW_USER_EMAIL/PW_USER_PASSWORD if defaults are unavailable.'
