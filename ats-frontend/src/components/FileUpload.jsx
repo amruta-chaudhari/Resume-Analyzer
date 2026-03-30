@@ -1,8 +1,24 @@
-import React, { useState, useCallback } from 'react';
-import { validateFile } from '../services/api';
+import React, { useState, useCallback, useEffect } from 'react';
+import { getResumes, validateFile } from '../services/api';
 
-const FileUpload = ({ onFileSelect, onFileError, selectedFile }) => {
+const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, onSavedResumeSelect }) => {
   const [dragActive, setDragActive] = useState(false);
+  const [savedResumes, setSavedResumes] = useState([]);
+  const [showSavedResumeDropdown, setShowSavedResumeDropdown] = useState(false);
+
+  useEffect(() => {
+    const loadResumes = async () => {
+      try {
+        const result = await getResumes(1, 100);
+        setSavedResumes(result?.resumes || []);
+      } catch (error) {
+        console.error('Failed to load saved resumes:', error);
+        setSavedResumes([]);
+      }
+    };
+
+    loadResumes();
+  }, []);
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -17,12 +33,19 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile }) => {
   const handleFile = useCallback((file) => {
     try {
       validateFile(file);
+      onSavedResumeSelect?.(null);
       onFileSelect(file);
     } catch (error) {
       onFileError(error.message);
       return;
     }
-  }, [onFileError, onFileSelect]);
+  }, [onFileError, onFileSelect, onSavedResumeSelect]);
+
+  const handleSelectSavedResume = useCallback((resume) => {
+    onFileSelect(null);
+    onSavedResumeSelect?.(resume);
+    setShowSavedResumeDropdown(false);
+  }, [onFileSelect, onSavedResumeSelect]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -62,6 +85,41 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile }) => {
         onDragOver={handleDrag}
         onDrop={handleDrop}
       >
+        {savedResumes.length > 0 && (
+          <div className="mb-4 relative text-left">
+            <button
+              type="button"
+              onClick={() => setShowSavedResumeDropdown((previous) => !previous)}
+              className="w-full glass px-4 py-3 rounded-xl flex items-center justify-between text-gray-700 dark:text-gray-300 hover:bg-white/10 transition-colors"
+            >
+              <span>
+                {selectedResume ? `Using saved resume: ${selectedResume.title}` : 'Reuse a saved resume'}
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${showSavedResumeDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showSavedResumeDropdown && (
+              <div className="absolute z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl dropdown-glass shadow-lg">
+                {savedResumes.map((resume) => (
+                  <button
+                    key={resume.id}
+                    type="button"
+                    onClick={() => handleSelectSavedResume(resume)}
+                    className="w-full border-b border-gray-200 px-4 py-3 text-left transition-colors hover:bg-white/10 dark:border-gray-700 last:border-b-0"
+                  >
+                    <div className="font-medium text-gray-800 dark:text-white">{resume.title}</div>
+                    <div className="truncate text-sm text-gray-600 dark:text-gray-400">
+                      {(resume.previewText || resume.content || resume.extractedText || 'No preview available').substring(0, 90)}...
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <input
           type="file"
           id="resume-upload"
@@ -114,6 +172,26 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile }) => {
                 </p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">
                   {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedResume && !selectedFile && (
+          <div className="mt-6 slide-up gpu-optimized">
+            <div className="glass-strong rounded-2xl p-4 inline-flex items-start space-x-3 max-w-sm gpu-optimized">
+              <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl flex items-center justify-center gpu-optimized">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                  {selectedResume.title}
+                </p>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                  Reusing a saved resume from your library for this analysis.
                 </p>
               </div>
             </div>

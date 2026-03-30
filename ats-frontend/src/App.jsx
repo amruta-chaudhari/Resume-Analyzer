@@ -5,6 +5,9 @@ import SignUp from './pages/SignUp';
 import Dashboard from './pages/Dashboard';
 import AnalysisPage from './pages/AnalysisPage';
 import AdminPage from './pages/AdminPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
+import AdminSystemPage from './pages/admin/AdminSystemPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppErrorBoundary from './components/AppErrorBoundary';
 
@@ -36,13 +39,18 @@ function App() {
               }
             />
             <Route
-              path="/admin"
+              path="/admin/*"
               element={
                 <ProtectedRoute requireAdmin>
                   <AdminPage />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<Navigate to="users" replace />} />
+              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="users/:userId" element={<AdminUserDetailPage />} />
+              <Route path="system" element={<AdminSystemPage />} />
+            </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

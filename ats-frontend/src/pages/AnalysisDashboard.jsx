@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyzeResume, getAnalysisById, testConnection, waitForAnalysisCompletion } from '../services/api';
+import { analyzeResume, analyzeStoredResume, getAnalysisById, testConnection, waitForAnalysisCompletion } from '../services/api';
 import FileUpload from '../components/FileUpload';
 import JobDescriptionInput from '../components/JobDescriptionInput';
 import ModelSelector from '../components/ModelSelector';
@@ -14,6 +14,7 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
 
   // ATS Analysis state
   const [resumeFile, setResumeFile] = useState(null);
+  const [selectedSavedResume, setSelectedSavedResume] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,6 +40,18 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
   // ATS Analysis handlers
   const handleFileSelect = useCallback((file) => {
     setResumeFile(file);
+    if (file) {
+      setSelectedSavedResume(null);
+    }
+    setError('');
+    setAnalysisResult(null);
+  }, []);
+
+  const handleSavedResumeSelect = useCallback((resume) => {
+    setSelectedSavedResume(resume);
+    if (resume) {
+      setResumeFile(null);
+    }
     setError('');
     setAnalysisResult(null);
   }, []);
@@ -70,8 +83,8 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
   }, [analysisResult, onModelParametersChange]);
 
   const handleAnalyze = async () => {
-    if (!resumeFile || !jobDescription) {
-      setError('Please provide both a resume and job description');
+    if ((!resumeFile && !selectedSavedResume) || !jobDescription) {
+      setError('Please provide a resume source and job description');
       return;
     }
 
@@ -86,13 +99,21 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
 
     try {
       const jobTitle = extractJobTitle(jobDescription);
-      const result = await analyzeResume(
-        resumeFile,
-        jobDescription,
-        showModelSelector ? selectedModel : null,
-        modelParameters,
-        jobTitle
-      );
+      const result = selectedSavedResume
+        ? await analyzeStoredResume(
+            selectedSavedResume.id,
+            jobDescription,
+            showModelSelector ? selectedModel : null,
+            modelParameters,
+            jobTitle
+          )
+        : await analyzeResume(
+            resumeFile,
+            jobDescription,
+            showModelSelector ? selectedModel : null,
+            modelParameters,
+            jobTitle
+          );
 
       let resolvedAnalysis = result;
 
@@ -129,6 +150,8 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
           onFileSelect={handleFileSelect}
           onFileError={handleFileError}
           selectedFile={resumeFile}
+          selectedResume={selectedSavedResume}
+          onSavedResumeSelect={handleSavedResumeSelect}
         />
 
         <JobDescriptionInput
@@ -145,9 +168,9 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
       <div className="mb-8">
         <button
           onClick={handleAnalyze}
-          disabled={!resumeFile || !jobDescription || isLoading || connectionStatus !== 'connected'}
+          disabled={(!resumeFile && !selectedSavedResume) || !jobDescription || isLoading || connectionStatus !== 'connected'}
           className={`w-full py-4 px-8 rounded-2xl font-semibold text-lg transition-all duration-300 ${
-            !resumeFile || !jobDescription || isLoading || connectionStatus !== 'connected'
+            (!resumeFile && !selectedSavedResume) || !jobDescription || isLoading || connectionStatus !== 'connected'
               ? 'bg-gray-300/50 text-gray-500 cursor-not-allowed'
               : 'btn-glass text-white shadow-lg hover:shadow-2xl'
           }`}
@@ -176,6 +199,11 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
         {showModelSelector && !selectedModel && connectionStatus === 'connected' && (
           <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
             No AI model selected. Using default model.
+          </p>
+        )}
+        {showModelSelector && connectionStatus === 'connected' && (
+          <p className="text-center text-sm text-cyan-700 dark:text-cyan-300 mt-2">
+            Visual ATS mode uses image-capable models so the first page of your PDF can be reviewed alongside extracted text.
           </p>
         )}
         {connectionStatus !== 'connected' && (

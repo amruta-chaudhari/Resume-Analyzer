@@ -9,7 +9,7 @@ const promoteUserToAdmin = (email: string) => {
   const escapedEmail = email.replace(/'/g, "''");
   execFileSync('sqlite3', [
     databasePath,
-    `UPDATE users SET subscriptionTier = 'admin', emailVerified = 1 WHERE email = '${escapedEmail}';`,
+    `UPDATE users SET role = 'ADMIN', subscriptionTier = 'admin', emailVerified = 1 WHERE email = '${escapedEmail}';`,
   ]);
 };
 
@@ -58,7 +58,7 @@ test.describe('Admin Console', () => {
     await expectDashboardReady(page);
     await page.getByRole('link', { name: /open admin console/i }).click();
 
-    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page).toHaveURL(/\/admin\/users$/);
     await expect(page.getByRole('heading', { name: /user operations/i })).toBeVisible();
 
     await page.getByLabel(/search users/i).fill(target.email);
@@ -112,5 +112,57 @@ test.describe('Admin Console', () => {
     await expectDashboardReady(page);
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/dashboard\/analysis$/);
+  });
+
+  test('admin system configuration exposes fallback model catalogs for each provider', async ({ page, request, browserName }, testInfo) => {
+    test.skip(browserName !== 'chromium', 'Live admin route check runs once in chromium.');
+
+    const admin = createUniqueAuthUser(testInfo);
+
+    const adminRegister = await request.post('/api/auth/register', { data: admin });
+    expect(adminRegister.ok()).toBeTruthy();
+
+    promoteUserToAdmin(admin.email);
+
+    const loginResponse = await request.post('/api/auth/login', {
+      data: {
+        email: admin.email,
+        password: admin.password,
+      },
+    });
+
+    expect(loginResponse.ok()).toBeTruthy();
+    const loginPayload = await loginResponse.json();
+    const accessToken = loginPayload.data.tokens.accessToken;
+
+    await page.goto('/login');
+    await page.getByLabel(/^email$/i).fill(admin.email);
+    await page.getByLabel(/^password$/i).fill(admin.password);
+    await page.getByRole('button', { name: /sign in/i }).click();
+
+    await expectDashboardReady(page);
+    await page.getByRole('link', { name: /open admin console/i }).click();
+    await page.getByRole('link', { name: /system configuration/i }).click();
+
+    await expect(page).toHaveURL(/\/admin\/system$/);
+    const fetchModels = async (provider) => {
+      const response = await request.get(`/api/admin/models?provider=${encodeURIComponent(provider)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
+
+    let payload = await fetchModels('openai');
+    expect(payload.data.some((model) => model.name === 'GPT-5.4 Mini')).toBeTruthy();
+
+    payload = await fetchModels('gemini');
+    expect(payload.data.some((model) => model.name === 'Gemini 2.5 Flash')).toBeTruthy();
+
+    payload = await fetchModels('anthropic');
+    expect(payload.data.some((model) => model.name === 'Claude 4.5 Haiku')).toBeTruthy();
+
+    payload = await fetchModels('openrouter');
+    expect(payload.data.some((model) => model.name === 'Free Models Router')).toBeTruthy();
   });
 });

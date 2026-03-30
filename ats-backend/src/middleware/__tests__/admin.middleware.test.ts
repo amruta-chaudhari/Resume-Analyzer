@@ -40,6 +40,7 @@ describe('adminMiddleware', () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
       email: 'user@example.com',
+      role: 'USER',
       subscriptionTier: 'free',
       deletedAt: null,
     });
@@ -59,6 +60,7 @@ describe('adminMiddleware', () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 'admin-1',
       email: 'admin@example.com',
+      role: 'ADMIN',
       subscriptionTier: 'admin',
       deletedAt: null,
     });
@@ -69,6 +71,7 @@ describe('adminMiddleware', () => {
     expect(req.adminUser).toEqual({
       id: 'admin-1',
       email: 'admin@example.com',
+      role: 'ADMIN',
       subscriptionTier: 'admin',
     });
   });

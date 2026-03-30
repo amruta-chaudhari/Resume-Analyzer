@@ -167,6 +167,9 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                 {currentModel.description || ''}
               </p>
+              <p className="text-xs text-cyan-700 dark:text-cyan-300 mb-2 font-medium">
+                Visual ATS analysis enabled: this model accepts both text and image input.
+              </p>
               <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                 <span>Provider: {currentModel.provider}</span>
                 {currentModel.context_length && (
@@ -274,6 +277,9 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                         )}
                         {model.architecture?.modality && (
                           <span>{model.architecture.modality}</span>
+                        )}
+                        {model.supportsVision && (
+                          <span>image + text</span>
                         )}
                       </div>
                     </div>

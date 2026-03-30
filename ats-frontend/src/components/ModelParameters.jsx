@@ -14,7 +14,8 @@ const ModelParameters = ({
           const parsed = JSON.parse(saved);
           return {
             temperature: parsed.temperature ?? 0.15,
-            max_tokens: parsed.max_tokens ?? 4000,
+            max_tokens: parsed.max_completion_tokens ?? parsed.max_tokens ?? 4000,
+            max_completion_tokens: parsed.max_completion_tokens ?? parsed.max_tokens ?? 4000,
             include_reasoning: parsed.include_reasoning ?? false,
             ...parameters // Override with props if provided
           };
@@ -26,6 +27,7 @@ const ModelParameters = ({
     return {
       temperature: 0.15,
       max_tokens: 4000,
+      max_completion_tokens: 4000,
       include_reasoning: false,
       ...parameters
     };
@@ -51,10 +53,20 @@ const ModelParameters = ({
   }, [parameters]);
 
   const handleParameterChange = (paramName, value) => {
-    const updatedParams = {
-      ...localParameters,
-      [paramName]: value
-    };
+    const updatedParams = (() => {
+      if (paramName === 'max_tokens' || paramName === 'max_completion_tokens') {
+        return {
+          ...localParameters,
+          max_tokens: value,
+          max_completion_tokens: value,
+        };
+      }
+
+      return {
+        ...localParameters,
+        [paramName]: value,
+      };
+    })();
     setLocalParameters(updatedParams);
     onParametersChange(updatedParams);
   };

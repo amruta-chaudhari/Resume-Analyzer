@@ -3,9 +3,18 @@ import axios from 'axios';
 import OpenAI from 'openai';
 import { MockDataFactory } from '../../__tests__/factories';
 import { TestHelpers } from '../../__tests__/helpers';
+import { systemSettingsService } from '../system-settings.service';
 
 // Mock axios
 jest.mock('axios');
+
+jest.mock('../system-settings.service', () => ({
+  __esModule: true,
+  systemSettingsService: {
+    getSettings: jest.fn(),
+    getEffectiveLlmPolicy: jest.fn(),
+  },
+}));
 
 // Create mock implementation that returns a proper mock instance
 const mockChatCompletionsCreate = jest.fn();
@@ -24,12 +33,50 @@ describe('AIService', () => {
   let aiService: AIService;
   let mockAxios: any;
   let mockOpenAI: any;
+  let mockSystemSettingsService: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     aiService = new AIService();
+    aiService.clearCache();
     mockAxios = axios as any;
     mockOpenAI = OpenAI as any;
+    mockSystemSettingsService = systemSettingsService as any;
+    mockSystemSettingsService.getSettings.mockResolvedValue({
+      activeAiProvider: 'openrouter',
+      openRouterKey: 'test-openrouter-key',
+      openAiKey: null,
+      geminiKey: null,
+      anthropicKey: null,
+      allowedModels: null,
+      modelPricing: null,
+    });
+    mockAxios.get.mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: 'openrouter/free',
+            name: 'Free Models Router',
+            provider: 'openrouter',
+            context_length: 200000,
+            pricing: { prompt: '0', completion: '0' },
+            supported_parameters: ['temperature', 'max_tokens'],
+            architecture: { modality: 'text+image' },
+            created: Math.floor(Date.now() / 1000),
+          },
+          {
+            id: 'gpt-4',
+            name: 'GPT-4',
+            provider: 'openrouter',
+            context_length: 128000,
+            pricing: { prompt: '0.0000025', completion: '0.000010' },
+            supported_parameters: ['temperature', 'max_tokens'],
+            architecture: { modality: 'text+image' },
+            created: Math.floor(Date.now() / 1000),
+          },
+        ],
+      },
+    });
   });
 
   describe('analyzeFormattingIssues', () => {
@@ -218,7 +265,7 @@ describe('AIService', () => {
       const result = await aiService.analyzeResume(
         resume,
         jobDescription,
-        'gpt-4'
+        'openrouter/free'
       );
 
       expect(result).toHaveProperty('overallScore');
@@ -260,7 +307,7 @@ describe('AIService', () => {
       expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           temperature: 0.5,
-          max_tokens: 1000,
+          max_completion_tokens: 1000,
         })
       );
     });
@@ -282,7 +329,7 @@ describe('AIService', () => {
       expect(result).toHaveProperty('overallScore');
     });
 
-    it('should throw error if response has invalid structure', async () => {
+    it('should reject partial responses missing required top-level sections', async () => {
       const resume = MockDataFactory.generateResumeText();
       const jobDescription = MockDataFactory.generateJobDescription();
       const invalidResult = { score: 50 }; // Missing required fields
@@ -291,9 +338,7 @@ describe('AIService', () => {
         choices: [{ message: { content: JSON.stringify(invalidResult) } }],
       });
 
-      await expect(
-        aiService.analyzeResume(resume, jobDescription)
-      ).rejects.toThrow();
+      await expect(aiService.analyzeResume(resume, jobDescription)).rejects.toThrow();
     });
 
     it('should throw error if no response from AI', async () => {
@@ -325,12 +370,12 @@ describe('AIService', () => {
     it('should include model info in response', async () => {
       const resume = MockDataFactory.generateResumeText();
       const jobDescription = MockDataFactory.generateJobDescription();
-      const model = 'gpt-4';
+      const model = 'openrouter/free';
       const analysisResult = MockDataFactory.generateAnalysisResult({
         modelUsed: {
           id: model,
-          name: 'GPT-4',
-          provider: 'OpenAI',
+            name: 'GPT-4',
+            provider: 'openrouter',
         },
       });
 
@@ -346,6 +391,25 @@ describe('AIService', () => {
 
       expect(result.modelUsed).toBeDefined();
       expect(result.modelUsed.id).toBe(model);
+    });
+
+    it('should fall back to an executable configured model when selected model is unavailable', async () => {
+      const resume = MockDataFactory.generateResumeText();
+      const jobDescription = MockDataFactory.generateJobDescription();
+      const analysisResult = MockDataFactory.generateAnalysisResult();
+
+      mockChatCompletionsCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: JSON.stringify(analysisResult) } }],
+      });
+
+      const result = await aiService.analyzeResume(
+        resume,
+        jobDescription,
+        'gpt-5.4-mini'
+      );
+
+      expect(result.modelUsed.id).toBe('openrouter/free');
+      expect(result.analysisMethod).toBe('hybrid_deterministic_v2');
     });
   });
 
@@ -444,12 +508,12 @@ describe('AIService', () => {
       await aiService.analyzeResume(
         resume,
         jobDescription,
-        'gpt-4',
+        'openrouter/free',
         { max_tokens: 50000 } // Should be capped at 16000
       );
 
       const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-      expect(callArgs.max_tokens).toBeLessThanOrEqual(16000);
+      expect(callArgs.max_completion_tokens).toBeLessThanOrEqual(16000);
     });
 
     it('should use default temperature if not specified', async () => {
@@ -461,7 +525,7 @@ describe('AIService', () => {
         choices: [{ message: { content: JSON.stringify(analysisResult) } }],
       });
 
-      await aiService.analyzeResume(resume, jobDescription, 'gpt-4');
+      await aiService.analyzeResume(resume, jobDescription, 'openrouter/free');
 
       const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
       expect(callArgs.temperature).toBe(0.15); // Default temperature

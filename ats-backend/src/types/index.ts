@@ -34,6 +34,7 @@ export interface AIModel {
   provider: string;
   context_length: number;
   recommended?: boolean;
+  supportsVision?: boolean;
   supported_parameters: string[];
   per_request_limits?: {
     input_tokens?: number;
@@ -55,6 +56,7 @@ export interface AIModel {
 export interface ModelParameters {
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean;
 }
 
@@ -154,8 +156,25 @@ export interface AnalysisResult {
   experienceRelevance: ExperienceRelevance;
   actionableAdvice: string[];
   modelUsed: ModelUsed;
+  analysisWarnings?: string[];
+  analysisMethod?: string;
+  scoringBreakdown?: {
+    skills: number;
+    experience: number;
+    formatting: number;
+    weights: {
+      skills: number;
+      experience: number;
+      formatting: number;
+    };
+    keywordCoverage: number;
+    experienceKeywordCoverage: number;
+  };
   processingTime?: number;
   tokensUsed?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  estimatedCost?: string;
 }
 
 export interface AnalysisInput {
@@ -275,6 +294,7 @@ export interface AnalyzeRequestBody {
   selectedModel?: string;
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean | string;
 }
 
@@ -291,6 +311,7 @@ export interface ResumeAnalyzeRequestBody {
   selectedModel?: string;
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   include_reasoning?: boolean | string;
 }
 
@@ -313,9 +334,10 @@ export interface CompletionParameters {
     role: 'user' | 'assistant' | 'system';
     content: string;
   }>;
-  temperature: number;
-  max_tokens: number;
-  seed: number;
+  temperature?: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
@@ -347,17 +369,21 @@ export interface ModelCache {
 // User Types
 // ========================================
 
+export type UserRole = 'USER' | 'ADMIN';
+
 export interface UserData {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
   subscriptionTier: string;
+  role: UserRole;
 }
 
 export interface TokenPayload {
   userId: string;
   email: string;
+  role?: UserRole;
 }
 
 // ========================================

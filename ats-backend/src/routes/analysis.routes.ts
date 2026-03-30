@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
 import { analysesPerDayLimiter } from '../middleware/rate-limiter.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 import prisma from '../lib/prisma';
 import { safeJsonParse } from '../lib/json';
 import {
@@ -27,29 +28,205 @@ import type {
 } from '../types/index';
 import { Logger } from '../utils/logger';
 import { sanitizeJobDescription, sanitizeJobTitle } from '../utils/sanitizer';
+import { systemSettingsService } from '../services/system-settings.service';
+import { llmUsageService } from '../services/llm-usage.service';
+import { AIService } from '../services/ai.service';
 
 const router: Router = Router();
+const aiService = new AIService();
 
-/**
- * Admin authorization helper
- */
-const requireAdmin = async (req: AuthRequest, res: Response) => {
-  if (!req.userId) {
-    res.status(401).json({ success: false, error: 'Authentication required' });
+const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
+
+const getCurrentMonthUtcWindow = () => {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return { start, end };
+};
+
+const parseAllowedModels = (value: string | null | undefined): string[] => {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
+const toPositiveNumberOrNull = (value: unknown): number | null => {
+  if (value == null) {
     return null;
   }
 
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const normalizeModelIdentifier = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 150 || !SUPPORTED_MODEL_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const hasLegacyAdminTier = (subscriptionTier?: string | null): boolean =>
+  typeof subscriptionTier === 'string' && subscriptionTier.trim().toLowerCase() === 'admin';
+
+const estimateInputTokens = (
+  resumeText: string,
+  jobDescription: string,
+  resumeFileBytes?: number
+): number => {
+  const resumeChars = resumeText
+    ? resumeText.length
+    : (resumeFileBytes ? Math.ceil(resumeFileBytes * 1.5) : 0);
+  const combinedLength = resumeChars + jobDescription.length;
+  return Math.max(1, Math.ceil(combinedLength / 4));
+};
+
+const estimateCostUsd = (
+  modelPricingRaw: string | null | undefined,
+  modelId: string,
+  estimatedInputTokens: number,
+  maxTokens: number
+): number | null => {
+  if (!modelPricingRaw) {
+    return null;
+  }
+
+  try {
+    const pricingMap = JSON.parse(modelPricingRaw) as Record<string, { prompt?: string | number; completion?: string | number }>;
+    const pricing = pricingMap[modelId];
+    if (!pricing) {
+      return null;
+    }
+
+    const promptRate = Number(pricing.prompt ?? 0);
+    const completionRate = Number(pricing.completion ?? 0);
+    if (!Number.isFinite(promptRate) || !Number.isFinite(completionRate) || promptRate < 0 || completionRate < 0) {
+      return null;
+    }
+
+    return (estimatedInputTokens * promptRate) + (Math.max(0, maxTokens) * completionRate);
+  } catch {
+    return null;
+  }
+};
+
+const enforceLlmPolicy = async (params: {
+  userId: string;
+  includeReasoning: boolean;
+  selectedModel?: string;
+  fallbackModel: string;
+  maxTokens: number;
+  resumeText: string;
+  resumeFileBytes?: number;
+  jobDescription: string;
+  modelPricing: string | null;
+  systemAllowedModels: string | null;
+}) => {
   const user = await prisma.user.findUnique({
-    where: { id: req.userId },
-    select: { subscriptionTier: true },
+    where: { id: params.userId },
+    select: {
+      id: true,
+      subscriptionTier: true,
+      role: true,
+      llmMonthlyBudgetUsd: true,
+      llmMonthlyTokenLimit: true,
+      llmAllowReasoning: true,
+      llmAllowedModels: true,
+    },
   });
 
-  if (!user || user.subscriptionTier !== 'admin') {
-    res.status(403).json({ success: false, error: 'Admin access required' });
-    return null;
+  if (!user) {
+    throw new Error('User not found');
   }
 
-  return user;
+  if (user.role === 'ADMIN' || hasLegacyAdminTier(user.subscriptionTier)) {
+    return;
+  }
+
+  const policy = await systemSettingsService.getEffectiveLlmPolicy(user);
+
+  if (params.includeReasoning && !policy.allowReasoning) {
+    throw new Error('Reasoning mode is not enabled for your plan');
+  }
+
+  const selectedModel = normalizeModelIdentifier(params.selectedModel ?? params.fallbackModel);
+  if (!selectedModel) {
+    throw new Error('Invalid model selection');
+  }
+
+  const globallyAllowedModels = parseAllowedModels(params.systemAllowedModels);
+  if (globallyAllowedModels.length > 0 && !globallyAllowedModels.includes(selectedModel)) {
+    throw new Error('Selected model is not allowed by admin policy');
+  }
+
+  if (policy.allowedModels && policy.allowedModels.length > 0 && !policy.allowedModels.includes(selectedModel)) {
+    throw new Error('Selected model is not available for your plan');
+  }
+
+  const { start, end } = getCurrentMonthUtcWindow();
+  const usageRows = await prisma.aiUsage.findMany({
+    where: {
+      userId: params.userId,
+      createdAt: {
+        gte: start,
+        lt: end,
+      },
+    },
+    select: {
+      tokensUsed: true,
+      costUsd: true,
+    },
+  });
+
+  const usedTokens = usageRows.reduce((sum, row) => sum + (row.tokensUsed || 0), 0);
+  const usedCostUsd = usageRows.reduce((sum, row) => sum + (row.costUsd || 0), 0);
+
+  const estimatedInputTokens = estimateInputTokens(
+    params.resumeText,
+    params.jobDescription,
+    params.resumeFileBytes
+  );
+  const estimatedTotalTokens = estimatedInputTokens + params.maxTokens;
+  const estimatedCostUsd = estimateCostUsd(
+    params.modelPricing,
+    selectedModel,
+    estimatedInputTokens,
+    params.maxTokens
+  ) || 0;
+
+  const tokenLimit = toPositiveNumberOrNull(policy.monthlyTokenLimit);
+  if (tokenLimit != null && (usedTokens + estimatedTotalTokens) > tokenLimit) {
+    throw new Error('Monthly token limit reached for your plan');
+  }
+
+  const budgetLimit = toPositiveNumberOrNull(policy.monthlyBudgetUsd);
+  if (budgetLimit != null && (usedCostUsd + estimatedCostUsd) > budgetLimit) {
+    throw new Error('Monthly LLM budget reached for your plan');
+  }
 };
 
 /**
@@ -61,6 +238,38 @@ const serverError = (res: Response, error: string) => {
     error,
   });
 };
+
+router.get('/usage/summary', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        subscriptionTier: true,
+        llmMonthlyBudgetUsd: true,
+        llmMonthlyTokenLimit: true,
+        llmMonthlyRequestLimit: true,
+        llmAllowReasoning: true,
+        llmAllowedModels: true,
+        llmAllowedProviders: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const summary = await llmUsageService.getCurrentMonthSummary(user);
+    return res.json({ success: true, data: summary });
+  } catch (error) {
+    const err = error instanceof Error ? error.message : 'Failed to load usage summary';
+    return res.status(500).json({ success: false, error: err });
+  }
+});
 
 // Configure multer for file uploads (store in memory)
 const storage = multer.memoryStorage();
@@ -90,6 +299,7 @@ const upload = multer({
  * - jobTitle: Optional job title
  * - selectedModel: Optional model ID to use
  * - temperature: Optional temperature parameter (0-2)
+ * - max_completion_tokens: Optional max completion tokens (500-16000)
  * - max_tokens: Optional max tokens (500-16000)
  * - include_reasoning: Optional boolean
  */
@@ -119,13 +329,15 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
         const selectedModel = typeof body.selectedModel === 'string' ? body.selectedModel : undefined;
 
         const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
-        const maxTokensParam = Number.parseInt(String(body.max_tokens ?? ''), 10);
+        const rawMaxTokens = body.max_completion_tokens ?? body.max_tokens;
+        const maxTokensParam = Number.parseInt(String(rawMaxTokens ?? ''), 10);
         const temperature = Number.isFinite(temperatureParam)
             ? Math.min(Math.max(temperatureParam, 0), 2)
             : undefined;
         const maxTokens = Number.isFinite(maxTokensParam)
             ? Math.min(Math.max(maxTokensParam, 500), 16000)
             : undefined;
+        const includeReasoning = body.include_reasoning === 'true' || body.include_reasoning === true;
 
         if (!jobDescription || jobDescription.length < 30) {
             return res.status(400).json({
@@ -160,6 +372,24 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             });
         }
 
+        const modelIdentifier = normalizeModelIdentifier(selectedModel);
+        if (selectedModel && !modelIdentifier) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid model selection',
+          });
+        }
+
+        const executionPlan = await aiService.planAnalysisExecution({
+          userId: req.userId,
+          selectedModel: modelIdentifier || undefined,
+          maxTokens: maxTokens ?? 4000,
+          resumeText: '',
+          resumeFileBytes: req.file.size,
+          jobDescription,
+          includeReasoning,
+        });
+
         // Queue the analysis job instead of processing synchronously
         const job = await queueAnalysisJob({
             userId: req.userId!,
@@ -169,10 +399,11 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
             fileBuffer: req.file.buffer,
             fileName: req.file.originalname,
             fileMimeType: req.file.mimetype,
-            selectedModel,
+            selectedModel: modelIdentifier || undefined,
             temperature,
+            max_completion_tokens: maxTokens,
             max_tokens: maxTokens,
-            include_reasoning: body.include_reasoning === 'true' || body.include_reasoning === true
+            include_reasoning: includeReasoning
         });
 
         Logger.info(`Analysis job queued for user ${req.userId}: ${job.id}`);
@@ -189,6 +420,12 @@ router.post('/analyze', authMiddleware, analysesPerDayLimiter, upload.single('re
     } catch (error: unknown) {
         const err = error instanceof Error ? error.message : 'Unknown error';
         Logger.error('Failed to queue analysis:', new Error(err));
+        if (/limit|budget|allowed|not enabled/i.test(err)) {
+            return res.status(403).json({ success: false, error: err });
+        }
+        if (/invalid|unsupported|scanned|upload/i.test(err)) {
+            return res.status(400).json({ success: false, error: err });
+        }
         serverError(res, 'Failed to queue analysis: ' + err);
     }
 });
@@ -413,13 +650,8 @@ router.get('/analysis/:jobId/status', authMiddleware, async (req: AuthRequest, r
  * GET /api/queue/stats - Get queue statistics (admin only)
  * Returns statistics about the analysis queue and processing
  */
-router.get('/queue/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/queue/stats', authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
     try {
-        const adminUser = await requireAdmin(req, res);
-        if (!adminUser) {
-            return;
-        }
-
         const stats = await getQueueStats();
 
         res.json({

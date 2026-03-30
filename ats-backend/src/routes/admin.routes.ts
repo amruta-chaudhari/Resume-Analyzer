@@ -7,6 +7,7 @@ import { AppError } from '../utils/errors';
 
 const router: Router = Router();
 const adminService = new AdminService();
+const USER_ROLES = ['USER', 'ADMIN'];
 
 const sendAdminError = (res: Response, error: unknown, fallbackMessage: string) => {
   if (error instanceof AppError) {
@@ -80,8 +81,19 @@ router.patch(
     body('lastName').optional({ nullable: true }).isLength({ min: 0, max: 100 }),
     body('phone').optional({ nullable: true }).isLength({ min: 0, max: 30 }),
     body('subscriptionTier').optional().isLength({ min: 1, max: 50 }),
+    body('role').optional().isIn(USER_ROLES),
     body('emailVerified').optional().isBoolean(),
     body('deleted').optional().isBoolean(),
+    body('llmMonthlyBudgetUsd').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('llmMonthlyTokenLimit').optional({ nullable: true }).isInt({ min: 0 }),
+    body('llmMonthlyRequestLimit').optional({ nullable: true }).isInt({ min: 0 }),
+    body('llmAllowReasoning').optional({ nullable: true }).isBoolean(),
+    body('llmAllowedModels').optional({ nullable: true }).isString(),
+    body('llmAllowedProviders').optional({ nullable: true }).isString(),
+    body('llmOpenRouterKey').optional({ nullable: true }).isString(),
+    body('llmOpenAiKey').optional({ nullable: true }).isString(),
+    body('llmGeminiKey').optional({ nullable: true }).isString(),
+    body('llmAnthropicKey').optional({ nullable: true }).isString(),
   ],
   async (req: AdminRequest, res: Response) => {
     try {

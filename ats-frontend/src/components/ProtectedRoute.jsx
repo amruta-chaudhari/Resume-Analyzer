@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -22,11 +22,15 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (requireAdmin && user?.subscriptionTier !== 'admin') {
+  const hasAdminAccess =
+    user?.role === 'ADMIN' ||
+    user?.subscriptionTier === 'admin';
+
+  if (requireAdmin && !hasAdminAccess) {
     return <Navigate to="/dashboard/analysis" replace state={{ from: location }} />;
   }
 
-  return children;
+  return children || <Outlet />;
 };
 
 export default ProtectedRoute;

@@ -25,6 +25,7 @@ import {
   formatResumeForList,
   type ResumeFilterOptions,
 } from '../utils/pagination';
+import { buildResumeVisualInput } from '../utils/resume-visual-input';
 import type {
   ModelParameters,
   ResumeUpdateRequestBody,
@@ -38,17 +39,35 @@ const router: Router = Router();
 
 const parseModelParameters = (body: any): ModelParameters => {
   const temperatureParam = Number.parseFloat(String(body.temperature ?? ''));
-  const maxTokensParam = Number.parseInt(String(body.max_tokens ?? ''), 10);
+  const rawMaxTokens = body.max_completion_tokens ?? body.max_tokens;
+  const maxTokensParam = Number.parseInt(String(rawMaxTokens ?? ''), 10);
+  const normalizedMaxTokens = Number.isFinite(maxTokensParam)
+    ? Math.min(Math.max(maxTokensParam, 500), 16000)
+    : undefined;
 
   return {
     temperature: Number.isFinite(temperatureParam)
       ? Math.min(Math.max(temperatureParam, 0), 2)
       : undefined,
-    max_tokens: Number.isFinite(maxTokensParam)
-      ? Math.min(Math.max(maxTokensParam, 500), 16000)
-      : undefined,
+    max_completion_tokens: normalizedMaxTokens,
+    max_tokens: normalizedMaxTokens,
     include_reasoning: body.include_reasoning === 'true' || body.include_reasoning === true,
   };
+};
+
+const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
+
+const normalizeModelIdentifier = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || !SUPPORTED_MODEL_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
 };
 
 const normalizeResumeUpdatePayload = (body: any): ResumeUpdateRequestBody => {
@@ -462,7 +481,7 @@ router.get('/:id/export/word', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/resumes/parse
-router.post('/parse', async (req: AuthRequest, res: Response) => {
+router.post('/parse', analysesPerDayLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body as ResumesParseRequestBody;
     const { text } = body;
@@ -482,7 +501,11 @@ router.post('/parse', async (req: AuthRequest, res: Response) => {
 router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body as ResumeAnalyzeRequestBody;
-    const { selectedModel } = body;
+    const selectedModel = normalizeModelIdentifier(body.selectedModel);
+
+    if (body.selectedModel && !selectedModel) {
+      return res.status(400).json({ error: 'Invalid model selection' });
+    }
 
     const normalizedJobDescription = typeof body.jobDescription === 'string'
       ? sanitizeJobDescription(body.jobDescription)
@@ -502,6 +525,8 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
         title: true,
         extractedText: true,
         content: true,
+        originalFileId: true,
+        originalFileType: true,
       },
     });
 
@@ -515,12 +540,30 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     }
 
     const modelParameters = parseModelParameters(req.body);
+    const resumeVisualInput = resume.originalFileId && resume.originalFileType
+      ? await fileStorage.getFile(resume.originalFileId, req.userId!).then((buffer) => {
+        if (!buffer) {
+          return null;
+        }
+        return buildResumeVisualInput(buffer, resume.originalFileType || '');
+      })
+      : null;
+    const executionPlan = await aiService.planAnalysisExecution({
+      userId: req.userId!,
+      selectedModel: selectedModel || undefined,
+      maxTokens: modelParameters.max_completion_tokens ?? modelParameters.max_tokens ?? 4000,
+      resumeText,
+      jobDescription: normalizedJobDescription.trim(),
+      requireVision: Boolean(resumeVisualInput),
+      includeReasoning: Boolean(modelParameters.include_reasoning),
+    });
 
     const analysisResult = await aiService.analyzeResume(
       resumeText,
       normalizedJobDescription.trim(),
-      selectedModel,
-      modelParameters
+      selectedModel || undefined,
+      modelParameters,
+      { userId: req.userId!, feature: 'stored_resume_analysis', resumeVisualInput }
     );
 
     const savedData = await prisma.$transaction(async (tx: any) => {
@@ -562,6 +605,9 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
           completedAt: new Date(),
           processingTimeMs: (analysisResult as AnalysisResult).processingTime || null,
           tokensUsed: (analysisResult as AnalysisResult).tokensUsed || null,
+          promptTokens: (analysisResult as AnalysisResult).promptTokens || null,
+          completionTokens: (analysisResult as AnalysisResult).completionTokens || null,
+          estimatedCost: (analysisResult as AnalysisResult).estimatedCost || null,
         },
       });
 
@@ -579,7 +625,8 @@ router.post('/:id/analyze', analysesPerDayLimiter, async (req: AuthRequest, res:
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to analyze resume';
-    res.status(500).json({ error: message });
+    const statusCode = /limit|budget|allowed|not enabled/i.test(message) ? 403 : 500;
+    res.status(statusCode).json({ error: statusCode === 500 ? 'Failed to analyze resume' : message });
   }
 });
 

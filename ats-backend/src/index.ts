@@ -116,15 +116,24 @@ const noopLimiter: express.RequestHandler = (_req, _res, next) => next();
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Disabled CORS checks temporarily
-    callback(null, true);
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (configuredCorsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
 };
 
 const isProduction = process.env.NODE_ENV === 'production';
-const disableRateLimits = true; // parseBooleanFlag(process.env.DISABLE_RATE_LIMITS);
-const relaxedRateLimits = true; // !isProduction || parseBooleanFlag(process.env.RELAX_RATE_LIMITS);
+const disableRateLimits = parseBooleanFlag(process.env.DISABLE_RATE_LIMITS);
+const relaxedRateLimits = !isProduction || parseBooleanFlag(process.env.RELAX_RATE_LIMITS);
 const rateLimitWindowMs = parsePositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000);
 
 const createConfiguredLimiter = (

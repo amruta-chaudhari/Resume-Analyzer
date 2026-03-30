@@ -7,7 +7,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getAvailableModels } from '../services/api';
 
-const DEFAULT_MODEL = 'openrouter/free';
+const DEFAULT_MODEL = 'openai/gpt-5.4-mini';
+const isVisionCapableModel = (model) =>
+  model?.supportsVision === true || String(model?.architecture?.modality || '').toLowerCase().includes('image');
 
 export const useModelSelector = (selectedModel, onModelSelect, disabled = false) => {
   const [models, setModels] = useState([]);
@@ -33,12 +35,18 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
     
     try {
       const models = await getAvailableModels();
+      const visionModels = (models || []).filter(isVisionCapableModel);
       // Sort by created date (desc) by default
-      const sortedModels = (models || []).sort((a, b) => {
+      const sortedModels = visionModels.sort((a, b) => {
         return new Date(b.created * 1000) - new Date(a.created * 1000);
       });
-      
+
       setModels(sortedModels);
+
+      if (sortedModels.length === 0) {
+        setError('No image-capable AI models are available right now.');
+        return;
+      }
       
       // Ensure a valid model is selected
       if (sortedModels.length > 0) {
@@ -55,12 +63,14 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
       // Fallback to default model
       const fallbackModel = {
         id: DEFAULT_MODEL,
-        name: 'OpenRouter Free',
-        provider: 'OpenRouter',
-        description: 'OpenRouter route that automatically selects an available free model.',
+        name: 'GPT-5.4 Mini',
+        provider: 'OpenAI',
+        description: 'Image-capable default model for visual ATS analysis.',
         created: Math.floor(Date.now() / 1000),
         context_length: 128000,
-        recommended: true
+        recommended: true,
+        supportsVision: true,
+        architecture: { modality: 'text+image' },
       };
       setModels([fallbackModel]);
       onModelSelect(DEFAULT_MODEL);

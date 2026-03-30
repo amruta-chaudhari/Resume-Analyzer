@@ -1,11 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
+import type { UserRole } from '../types';
 
 export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
+  userRole?: UserRole;
 }
+
+const JWT_ISSUER = process.env.JWT_ISSUER?.trim() || undefined;
+const JWT_ACCESS_AUDIENCE = process.env.JWT_AUDIENCE?.trim() || undefined;
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -15,12 +20,16 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
+      algorithms: ['HS256'],
+      ...(JWT_ISSUER ? { issuer: JWT_ISSUER } : {}),
+      ...(JWT_ACCESS_AUDIENCE ? { audience: JWT_ACCESS_AUDIENCE } : {}),
+    }) as any;
 
     // Verify user exists in database
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, role: true, deletedAt: true },
     });
 
     if (!user || user.deletedAt) {
@@ -29,6 +38,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
     req.userId = decoded.userId;
     req.userEmail = decoded.email;
+    req.userRole = user.role;
 
     next();
   } catch (error) {

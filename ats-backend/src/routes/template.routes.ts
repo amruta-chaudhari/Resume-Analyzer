@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 import { TemplateService } from '../services/template.service';
-import prisma from '../lib/prisma';
 
 const router: Router = Router();
 const templateService = new TemplateService();
@@ -35,21 +35,8 @@ router.get('/:id', async (req: AuthRequest, res) => {
 });
 
 // POST /api/templates/seed - Seed default templates (admin only)
-router.post('/seed', async (req: AuthRequest, res) => {
+router.post('/seed', adminMiddleware, async (_req: AuthRequest, res) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId as string }, // Fixed param cast for req.userId
-      select: { subscriptionTier: true },
-    });
-
-    if (!user || user.subscriptionTier !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const templates = await templateService.seedDefaultTemplates();
     res.json({ success: true, data: templates, message: `Seeded ${templates.length} templates` });
   } catch (_error: any) {

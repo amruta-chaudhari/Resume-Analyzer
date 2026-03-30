@@ -14,11 +14,15 @@ const Dashboard = () => {
   const [sessionWarning, setSessionWarning] = useState('');
   const { clearAuth, updateUser, refreshToken, hasHydrated, user } = useAuthStore();
   const location = useLocation();
+  const hasAdminAccess =
+    user?.role === 'ADMIN' ||
+    user?.subscriptionTier === 'admin';
 
   // Model Parameters state
   const [modelParameters, setModelParameters] = useState({
     temperature: 0.15,
     max_tokens: 4000,
+    max_completion_tokens: 4000,
     include_reasoning: false
   });
 
@@ -222,10 +226,10 @@ const Dashboard = () => {
                 Logout
               </button>
             </div>
-            {user?.subscriptionTier === 'admin' && (
+            {hasAdminAccess && (
               <div className="mt-4 flex justify-center">
                 <Link
-                  to="/admin"
+                  to="/admin/users"
                   className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   Open Admin Console

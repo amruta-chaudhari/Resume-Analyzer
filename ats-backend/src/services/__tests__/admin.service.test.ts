@@ -70,6 +70,7 @@ describe('AdminService', () => {
     adminUser = MockDataFactory.createUser({
       id: 'admin-user-id',
       email: 'admin@example.com',
+      role: 'ADMIN',
       subscriptionTier: 'admin',
       emailVerified: true,
       phone: '555-0101',
@@ -77,6 +78,7 @@ describe('AdminService', () => {
     targetUser = MockDataFactory.createUser({
       id: 'target-user-id',
       email: 'target@example.com',
+      role: 'USER',
       subscriptionTier: 'free',
       emailVerified: false,
       phone: null,
@@ -217,7 +219,9 @@ describe('AdminService', () => {
       deletedAt: null,
     };
 
-    mockPrisma.user.findUnique.mockResolvedValueOnce(targetUser);
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce({ id: adminUser.id, role: adminUser.role })
+      .mockResolvedValueOnce(targetUser);
     mockPrisma.user.update.mockResolvedValueOnce(updatedUser);
     mockPrisma.auditLog.create.mockResolvedValueOnce({ id: 'audit-1' });
 

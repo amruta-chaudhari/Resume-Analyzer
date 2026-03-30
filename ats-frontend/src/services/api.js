@@ -23,6 +23,18 @@ const isAuthRequest = (url = '') => (
   url.includes('/api/auth/logout')
 );
 
+const normalizeModelParametersPayload = (modelParameters = {}) => {
+  const maxCompletionTokens =
+    modelParameters.max_completion_tokens ?? modelParameters.max_tokens;
+
+  return {
+    temperature: modelParameters.temperature,
+    max_completion_tokens: maxCompletionTokens,
+    max_tokens: maxCompletionTokens,
+    include_reasoning: modelParameters.include_reasoning,
+  };
+};
+
 let refreshPromise = null;
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -193,6 +205,7 @@ apiClient.interceptors.response.use(
 
 export const analyzeResume = async (resumeFile, jobDescription, selectedModel = null, modelParameters = {}, jobTitle = null) => {
   const formData = new FormData();
+  const normalizedParameters = normalizeModelParametersPayload(modelParameters);
   formData.append('resume', resumeFile);
   formData.append('jobDescription', jobDescription);
   
@@ -207,14 +220,15 @@ export const analyzeResume = async (resumeFile, jobDescription, selectedModel = 
   }
 
   // Include model parameters if provided
-  if (modelParameters.temperature !== undefined) {
-    formData.append('temperature', modelParameters.temperature);
+  if (normalizedParameters.temperature !== undefined) {
+    formData.append('temperature', normalizedParameters.temperature);
   }
-  if (modelParameters.max_tokens !== undefined) {
-    formData.append('max_tokens', modelParameters.max_tokens);
+  if (normalizedParameters.max_completion_tokens !== undefined) {
+    formData.append('max_completion_tokens', normalizedParameters.max_completion_tokens);
+    formData.append('max_tokens', normalizedParameters.max_completion_tokens);
   }
-  if (modelParameters.include_reasoning !== undefined) {
-    formData.append('include_reasoning', modelParameters.include_reasoning);
+  if (normalizedParameters.include_reasoning !== undefined) {
+    formData.append('include_reasoning', normalizedParameters.include_reasoning);
   }
 
   try {
@@ -315,6 +329,16 @@ export const getAnalysisById = async (analysisId) => {
   }
 };
 
+export const getUsageSummary = async () => {
+  try {
+    const response = await apiClient.get('/api/usage/summary');
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to fetch usage summary:', error);
+    throw new Error(`Failed to load usage summary: ${error.message}`);
+  }
+};
+
 export const parseResumeText = async (text) => {
   try {
     const response = await apiClient.post('/api/resumes/parse', { text });
@@ -359,11 +383,12 @@ export const analyzeStoredResume = async (
   jobTitle = null
 ) => {
   try {
+    const normalizedParameters = normalizeModelParametersPayload(modelParameters);
     const payload = {
       jobDescription,
       selectedModel,
       jobTitle,
-      ...modelParameters,
+      ...normalizedParameters,
     };
 
     const response = await apiClient.post(`/api/resumes/${resumeId}/analyze`, payload);
