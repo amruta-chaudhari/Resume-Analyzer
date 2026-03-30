@@ -191,7 +191,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
       <div className="glass-strong rounded-3xl p-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 space-y-4 sm:space-y-0">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">
-            {isEditing ? 'Edit Resume' : 'Create New Resume'}
+            {isEditing ? 'Update Resume File' : 'Upload Resume'}
           </h2>
           <button
             onClick={onCancel}
@@ -270,7 +270,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
           {/* File Upload */}
           <div>
             <label className="block text-lg font-semibold text-gray-800 dark:text-white mb-3">
-              Or Upload Resume File (PDF or DOCX)
+              Upload Resume File (PDF or DOCX)
             </label>
             <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
               <input
@@ -304,7 +304,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
                     {uploadedFile ? `Selected: ${uploadedFile.name}` : 'Click to upload PDF or DOCX file'}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    The file will be processed and text extracted automatically
+                    The uploaded file is the primary source and will be processed automatically for management and analysis.
                   </p>
                 </div>
               </label>
@@ -323,23 +323,22 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
             </div>
           </div>
 
-          {/* Content */}
+          {/* Optional Manual Text Import */}
           <div>
             <label htmlFor="content" className="block text-lg font-semibold text-gray-800 dark:text-white mb-3">
-              Resume Content
+              Resume Content (Optional Manual Text Import)
             </label>
             <textarea
               id="content"
               name="content"
               value={formData.content}
               onChange={handleChange}
-              placeholder="Paste your resume content here, or write it directly..."
+              placeholder="Only use this if you want to import raw resume text manually instead of uploading a file..."
               className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-900 dark:text-white font-mono text-sm resize-vertical h-48 sm:h-80"
               required={!uploadedFile}
             />
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Tip: You can paste content from your existing resume or write it directly here.
-              Use clear formatting with sections like Experience, Education, Skills, etc.
+              Optional: paste resume text only if you are not uploading a file.
             </p>
           </div>
 
@@ -354,7 +353,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              Parse with AI
+               Parse Imported Text
             </button>
             <button
               type="button"
@@ -365,7 +364,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M9 9h6M9 15h6" />
               </svg>
-              Preview Resume
+               Preview Imported Text
             </button>
           </div>
 
@@ -389,7 +388,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
                   <span className="ml-2">Saving...</span>
                 </div>
               ) : (
-                isEditing ? 'Update Resume' : 'Create Resume'
+                isEditing ? 'Update Resume' : 'Save Uploaded Resume'
               )}
             </button>
           </div>
@@ -405,7 +404,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M9 9h6M9 15h6" />
               </svg>
-              Preview Resume
+               Preview Imported Text
             </button>
           </div>
         )}

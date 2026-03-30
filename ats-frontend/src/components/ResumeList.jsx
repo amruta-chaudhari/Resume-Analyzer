@@ -79,7 +79,7 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">My Resumes</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Resume Library</h2>
         <button
           onClick={onCreateResume}
           className="btn-glass text-white px-4 sm:px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 w-full sm:w-auto text-sm sm:text-base"
@@ -87,7 +87,7 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
           <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Create New Resume
+          Upload Resume
         </button>
       </div>
 
@@ -102,12 +102,12 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300 mb-2">No resumes yet</h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">Create your first resume to get started</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">Upload your first resume to start analyzing and managing your files.</p>
           <button
             onClick={onCreateResume}
             className="btn-glass text-white px-6 py-3 rounded-xl font-semibold"
           >
-            Create Your First Resume
+            Upload Your First Resume
           </button>
         </div>
       ) : (

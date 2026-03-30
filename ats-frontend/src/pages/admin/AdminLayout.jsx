@@ -56,6 +56,9 @@ const AdminLayout = () => {
             <NavLink to="/admin/system" className={navClass}>
               System Configuration
             </NavLink>
+            <NavLink to="/admin/analytics" className={navClass}>
+              LLM Analytics
+            </NavLink>
           </div>
         </section>
 

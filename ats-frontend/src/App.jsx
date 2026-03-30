@@ -8,6 +8,7 @@ import AdminPage from './pages/AdminPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
 import AdminSystemPage from './pages/admin/AdminSystemPage';
+import AdminAnalyticsPage from './pages/admin/AdminAnalyticsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppErrorBoundary from './components/AppErrorBoundary';
 
@@ -50,6 +51,7 @@ function App() {
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="users/:userId" element={<AdminUserDetailPage />} />
               <Route path="system" element={<AdminSystemPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

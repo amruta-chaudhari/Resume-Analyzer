@@ -284,6 +284,55 @@ export class AIService {
         }];
     }
 
+    private getOpenRouterFallbackModels(now: number): AIModel[] {
+        return [
+            createDefaultModel(),
+            {
+                id: 'openai/gpt-5.4-nano', name: 'GPT-5.4 Nano', provider: 'openrouter',
+                context_length: 128000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                supportsVision: true,
+                pricing: { prompt: '0.0000003', completion: '0.0000012' },
+                created: Math.floor(now / 1000), description: 'Low-cost OpenRouter route for GPT-5.4 Nano',
+                architecture: { modality: 'text+image' }
+            },
+            {
+                id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter',
+                context_length: 1048576, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                supportsVision: true,
+                pricing: { prompt: '0.000000075', completion: '0.0000003' },
+                created: Math.floor(now / 1000), description: 'OpenRouter route for Gemini 2.5 Flash',
+                architecture: { modality: 'text+image' }
+            },
+            {
+                id: 'anthropic/claude-4.5-haiku', name: 'Claude 4.5 Haiku', provider: 'openrouter',
+                context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                supportsVision: true,
+                pricing: { prompt: '0.0000008', completion: '0.000004' },
+                created: Math.floor(now / 1000), description: 'OpenRouter route for Claude 4.5 Haiku',
+                architecture: { modality: 'text+image' }
+            },
+            {
+                id: 'anthropic/claude-4.6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'openrouter',
+                context_length: 200000, supported_parameters: ['temperature', 'max_completion_tokens', 'max_tokens'],
+                supportsVision: true,
+                pricing: { prompt: '0.000003', completion: '0.000015' },
+                created: Math.floor(now / 1000), description: 'OpenRouter route for Claude 4.6 Sonnet',
+                architecture: { modality: 'text+image' }
+            },
+        ];
+    }
+
+    private mergeUniqueModels(models: AIModel[]): AIModel[] {
+        const seen = new Set<string>();
+        return models.filter((model) => {
+            if (seen.has(model.id)) {
+                return false;
+            }
+            seen.add(model.id);
+            return true;
+        });
+    }
+
     private normalizeRuntimeProvider(provider: string | null | undefined, modelId?: string | null): AiProviderId {
         const normalizedProvider = (provider || '').toLowerCase();
         if (normalizedProvider.includes('openai')) {
@@ -956,10 +1005,13 @@ ${jobDescription}
                                 recommended: model.id === DEFAULT_MODEL,
                             }));
 
-                        allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : [createDefaultModel()]));
+                        allFetchedModels.push(...this.mergeUniqueModels([
+                            ...fetchedModels,
+                            ...this.getOpenRouterFallbackModels(now),
+                        ]));
                     } catch (error) {
                         console.error('Failed to fetch OpenRouter models. Relying on defaults.');
-                        allFetchedModels.push(createDefaultModel());
+                        allFetchedModels.push(...this.getOpenRouterFallbackModels(now));
                     }
                 }
                 
@@ -990,7 +1042,7 @@ ${jobDescription}
                     !denyAllByConfig &&
                     (provider.includes('openrouter') || provider === 'multiple')
                 ) {
-                    availableModels = [createDefaultModel()];
+                    availableModels = this.getOpenRouterFallbackModels(now);
                 }
 
                 // 2. Override with Admin's Custom Pricing
