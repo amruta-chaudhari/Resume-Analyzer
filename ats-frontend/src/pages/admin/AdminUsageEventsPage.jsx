@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import { adminCardClass, adminFieldClass, formatDateTime } from './shared';
@@ -62,6 +62,10 @@ const AdminUsageEventsPage = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadEvents();
+  }, []);
 
   const resetFilters = () => {
     setFilters(initialFilters);
