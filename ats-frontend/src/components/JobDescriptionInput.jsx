@@ -56,7 +56,7 @@ const JobDescriptionInput = ({ value, onChange }) => {
 
   return (
     <div className="glass-strong rounded-3xl p-4 sm:p-8 hover-glass transition-all duration-300">
-      <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center text-gray-800 dark:text-white">
+      <h2 id="job-description-input-label" className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center text-gray-800 dark:text-white">
         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-2 rounded-xl mr-3">
           <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
@@ -107,6 +107,7 @@ const JobDescriptionInput = ({ value, onChange }) => {
       
       <div className="relative">
         <textarea
+          aria-labelledby="job-description-input-label"
           className="w-full h-60 sm:h-80 p-4 sm:p-6 glass rounded-2xl border-0 focus:ring-2 focus:ring-purple-400 dark:focus:ring-purple-300 focus:outline-none resize-none text-gray-700 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-300 text-sm sm:text-base"
           placeholder="Paste the complete job description here...
 

@@ -10,6 +10,7 @@ const SettingsPanel = ({
   const [isOpen, setIsOpen] = useState(false);
   const triggerButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const panelRef = useRef(null);
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
@@ -41,6 +42,26 @@ const SettingsPanel = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (panelRef.current && !panelRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [isOpen]);
+
   const handleReset = () => {
     if (window.confirm('This will reset all settings to default. Continue?')) {
       onReset();
@@ -54,7 +75,7 @@ const SettingsPanel = ({
       <button
         ref={triggerButtonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-12 right-6 z-40 p-3 glass rounded-full transition-all duration-200 hover:scale-105 group"
+        className="fixed top-4 right-4 sm:top-12 sm:right-6 z-40 p-3 glass rounded-full transition-all duration-200 hover:scale-105 group"
         aria-label="Open settings"
         aria-expanded={isOpen}
         aria-controls="settings-panel"
@@ -81,7 +102,8 @@ const SettingsPanel = ({
           {/* Settings Panel */}
           <div
             id="settings-panel"
-            className="fixed top-12 right-4 sm:right-20 w-80 max-w-[calc(100vw-2rem)] z-40 slide-up"
+            ref={panelRef}
+            className="fixed top-16 right-4 sm:top-12 sm:right-20 w-80 max-w-[calc(100vw-2rem)] z-40 slide-up"
             role="dialog"
             aria-modal="true"
             aria-labelledby="settings-panel-title"
