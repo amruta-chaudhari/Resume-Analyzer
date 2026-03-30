@@ -136,22 +136,23 @@ describe('AIService', () => {
      it('should fetch available models from OpenRouter', async () => {
        const mockModels = [
          {
-           id: 'qwen/qwen3-coder:free',
-           name: 'Qwen3 Coder',
-           provider: 'qwen',
-           context_length: 128000,
-           pricing: { prompt: '0', completion: '0' },
-         },
-       ];
+            id: 'openai/gpt-5.4-mini',
+            name: 'GPT-5.4 Mini',
+            provider: 'openrouter',
+            context_length: 128000,
+            pricing: { prompt: '0', completion: '0' },
+            architecture: { modality: 'text+image' },
+          },
+        ];
 
        mockAxios.get.mockResolvedValueOnce({ data: { data: mockModels } });
 
-       const models = await aiService.getAvailableModels();
+        const models = await aiService.getAvailableModels();
 
-       expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
-       expect(models.some((model) => model.id === 'qwen/qwen3-coder:free')).toBe(true);
-       expect(mockAxios.get).toHaveBeenCalledWith('https://openrouter.ai/api/v1/models');
-     });
+        expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
+        expect(models.some((model) => model.id === 'openai/gpt-5.4-mini')).toBe(true);
+        expect(mockAxios.get).toHaveBeenCalledWith('https://openrouter.ai/api/v1/models');
+      });
 
      it('should cache models for 24 hours', async () => {
        // Skip this test as caching is tricky to test with module-level cache
@@ -210,45 +211,47 @@ describe('AIService', () => {
        mockAxios = axios as any;
      });
 
-     it('should clear and refresh model cache', async () => {
-       const mockModels = [
-         {
-           id: 'model1',
-           name: 'Model 1',
-           provider: 'provider1',
-           context_length: 4096,
-           pricing: { prompt: '0', completion: '0' },
-         },
-       ];
+      it('should clear and refresh model cache', async () => {
+        const mockModels = [
+          {
+            id: 'openai/gpt-5.4-mini',
+            name: 'GPT-5.4 Mini',
+            provider: 'openrouter',
+            context_length: 128000,
+            pricing: { prompt: '0', completion: '0' },
+            architecture: { modality: 'text+image' },
+          },
+        ];
 
        mockAxios.get.mockResolvedValueOnce({ data: { data: mockModels } });
 
-       const models = await aiService.refreshModelsCache();
+        const models = await aiService.refreshModelsCache();
 
-       expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
-       expect(models.some((model) => model.id === 'model1')).toBe(true);
-       expect(mockAxios.get).toHaveBeenCalled();
-     });
+        expect(models.some((model) => model.id === 'openrouter/free')).toBe(true);
+        expect(models.some((model) => model.id === 'openai/gpt-5.4-mini')).toBe(true);
+        expect(mockAxios.get).toHaveBeenCalled();
+      });
 
-     it('should force fetch new models even if cached', async () => {
-       const mockModels = [
-         {
-           id: 'model1',
-           name: 'Model 1',
-           provider: 'provider1',
-           context_length: 4096,
-           pricing: { prompt: '0', completion: '0' },
-         },
-       ];
+      it('should force fetch new models even if cached', async () => {
+        const mockModels = [
+          {
+            id: 'openai/gpt-5.4-mini',
+            name: 'GPT-5.4 Mini',
+            provider: 'openrouter',
+            context_length: 128000,
+            pricing: { prompt: '0', completion: '0' },
+            architecture: { modality: 'text+image' },
+          },
+        ];
 
        mockAxios.get.mockResolvedValueOnce({ data: { data: mockModels } });
        
-       const refreshed = await aiService.refreshModelsCache();
+        const refreshed = await aiService.refreshModelsCache();
 
-       expect(refreshed.some((model) => model.id === 'openrouter/free')).toBe(true);
-       expect(refreshed.some((model) => model.id === 'model1')).toBe(true);
-       expect(mockAxios.get).toHaveBeenCalled();
-     });
+        expect(refreshed.some((model) => model.id === 'openrouter/free')).toBe(true);
+        expect(refreshed.some((model) => model.id === 'openai/gpt-5.4-mini')).toBe(true);
+        expect(mockAxios.get).toHaveBeenCalled();
+      });
    });
 
   describe('analyzeResume', () => {
