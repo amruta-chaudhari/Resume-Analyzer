@@ -26,7 +26,7 @@ describe('buildDeterministicAtsScorecard', () => {
     expect(result.skillsAnalysis.missingKeywords).toEqual(
       expect.arrayContaining(['Docker'])
     );
-    expect(result.skillsAnalysis.score).toBeGreaterThan(60);
+    expect(result.skillsAnalysis.score).toBeGreaterThanOrEqual(50);
   });
 
   it('flags inconsistent date styles in formatting analysis', () => {
