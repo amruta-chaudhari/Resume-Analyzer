@@ -931,28 +931,35 @@ ${jobDescription}
                     try {
                         const response = await axios.get('https://openrouter.ai/api/v1/models');
                         const fetchedModels: AIModel[] = response.data.data
-                            .filter((model: AIModel) => model.id.includes('free') || model.pricing?.prompt === '0')
+                            .filter((model: AIModel) => {
+                                const modality = String(model.architecture?.modality || '').toLowerCase();
+                                if (modality.includes('embedding') || modality.includes('audio')) {
+                                    return false;
+                                }
+                                return inferVisionCapability(model.id, 'openrouter', model.architecture?.modality);
+                            })
                             .map((model: AIModel) => ({
                                 id: model.id,
                                 name: model.name || model.id,
-                                provider: model.id.split('/')[0],
+                                provider: 'openrouter',
                                 context_length: model.context_length || 4096,
-                                supportsVision: inferVisionCapability(model.id, model.provider, model.architecture?.modality),
+                                supportsVision: inferVisionCapability(model.id, 'openrouter', model.architecture?.modality),
                                 supported_parameters: model.supported_parameters || [],
                                 per_request_limits: model.per_request_limits,
                                 pricing: model.pricing,
                                 created: model.created,
-                                description: model.description || '',
+                                description: model.description || `OpenRouter route for ${model.id}`,
                                 architecture: {
                                     ...model.architecture,
-                                    modality: model.architecture?.modality || (inferVisionCapability(model.id, model.provider, model.architecture?.modality) ? 'text+image' : 'text'),
+                                    modality: model.architecture?.modality || (inferVisionCapability(model.id, 'openrouter', model.architecture?.modality) ? 'text+image' : 'text'),
                                 },
                                 recommended: model.id === DEFAULT_MODEL,
                             }));
 
-                        allFetchedModels.push(...fetchedModels);
+                        allFetchedModels.push(...(fetchedModels.length > 0 ? fetchedModels : [createDefaultModel()]));
                     } catch (error) {
                         console.error('Failed to fetch OpenRouter models. Relying on defaults.');
+                        allFetchedModels.push(createDefaultModel());
                     }
                 }
                 
