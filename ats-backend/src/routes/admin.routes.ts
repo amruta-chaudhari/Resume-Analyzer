@@ -35,6 +35,12 @@ router.get('/analytics/llm', async (req: AdminRequest, res: Response) => {
   try {
     const from = typeof req.query.from === 'string' ? new Date(req.query.from) : undefined;
     const to = typeof req.query.to === 'string' ? new Date(req.query.to) : undefined;
+    const minTokens = typeof req.query.minTokens === 'string' ? Number(req.query.minTokens) : undefined;
+    const maxTokens = typeof req.query.maxTokens === 'string' ? Number(req.query.maxTokens) : undefined;
+    const minCost = typeof req.query.minCost === 'string' ? Number(req.query.minCost) : undefined;
+    const maxCost = typeof req.query.maxCost === 'string' ? Number(req.query.maxCost) : undefined;
+    const maxResponseTimeMs = typeof req.query.maxResponseTimeMs === 'string' ? Number(req.query.maxResponseTimeMs) : undefined;
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
 
     const result = await llmUsageService.getAdminAnalytics({
       from: from && !Number.isNaN(from.getTime()) ? from : undefined,
@@ -43,6 +49,14 @@ router.get('/analytics/llm', async (req: AdminRequest, res: Response) => {
       model: typeof req.query.model === 'string' ? req.query.model : undefined,
       feature: typeof req.query.feature === 'string' ? req.query.feature : undefined,
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
+      minTokens: Number.isFinite(minTokens as number) ? minTokens : undefined,
+      maxTokens: Number.isFinite(maxTokens as number) ? maxTokens : undefined,
+      minCost: Number.isFinite(minCost as number) ? minCost : undefined,
+      maxCost: Number.isFinite(maxCost as number) ? maxCost : undefined,
+      maxResponseTimeMs: Number.isFinite(maxResponseTimeMs as number) ? maxResponseTimeMs : undefined,
+      query: typeof req.query.query === 'string' ? req.query.query : undefined,
+      limit: Number.isFinite(limit as number) ? limit : undefined,
     });
 
     return res.json({ success: true, data: result });
@@ -227,6 +241,24 @@ router.post(
       return res.json({ success: true, data: result });
     } catch (error) {
       return sendAdminError(res, error, 'Failed to bulk revoke sessions');
+    }
+  }
+);
+
+router.post(
+  '/users/bulk-delete',
+  [body('userIds').isArray({ min: 1 }), body('userIds.*').isString().isLength({ min: 1 })],
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Invalid input', details: errors.array() });
+      }
+
+      const result = await adminService.bulkDeleteUsers(req.body.userIds, getAuditContext(req));
+      return res.json({ success: true, data: result });
+    } catch (error) {
+      return sendAdminError(res, error, 'Failed to bulk delete users');
     }
   }
 );

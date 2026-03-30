@@ -408,6 +408,29 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/resumes/bulk-delete
+router.post('/bulk-delete', async (req: AuthRequest, res: Response) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((value: unknown) => String(value || '').trim()).filter(Boolean)
+      : [];
+
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'At least one resume id is required' });
+    }
+
+    const result = await resumeService.bulkDeleteResumes(req.userId!, ids);
+    res.json({ success: true, data: result });
+  } catch (error: unknown) {
+    const err = error as Error;
+    if (err.message?.includes('required')) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    res.status(500).json({ error: 'Failed to bulk delete resumes' });
+  }
+});
+
 // GET /api/resumes/:id/file - Download original resume file
 router.get('/:id/file', async (req: AuthRequest, res: Response) => {
   try {

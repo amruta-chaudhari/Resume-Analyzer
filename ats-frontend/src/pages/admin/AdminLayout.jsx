@@ -49,16 +49,21 @@ const AdminLayout = () => {
             </div>
           </div>
 
-          <div className="relative mt-7 inline-flex rounded-2xl border border-slate-200/80 bg-white/90 p-1 dark:border-slate-700 dark:bg-slate-900/80">
-            <NavLink to="/admin/users" className={navClass}>
-              User Management
-            </NavLink>
-            <NavLink to="/admin/system" className={navClass}>
-              System Configuration
-            </NavLink>
-            <NavLink to="/admin/analytics" className={navClass}>
-              LLM Analytics
-            </NavLink>
+          <div className="relative mt-7 overflow-x-auto">
+            <div className="inline-flex min-w-max rounded-2xl border border-slate-200/80 bg-white/90 p-1 dark:border-slate-700 dark:bg-slate-900/80">
+              <NavLink to="/admin/users" className={navClass}>
+                User Management
+              </NavLink>
+              <NavLink to="/admin/system" className={navClass}>
+                System Configuration
+              </NavLink>
+              <NavLink to="/admin/analytics" className={navClass}>
+                LLM Analytics
+              </NavLink>
+              <NavLink to="/admin/analytics/events" className={navClass}>
+                Usage Events
+              </NavLink>
+            </div>
           </div>
         </section>
 

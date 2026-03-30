@@ -12,7 +12,7 @@ import { Logger, createRequestContext } from '../utils/logger';
  */
 export const requestContextMiddleware = (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ) => {
   // Add request ID
@@ -29,6 +29,18 @@ export const requestContextMiddleware = (
     ip: req.ip,
     userAgent: req.get('user-agent'),
   });
+
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    Logger.popContext();
+  };
+
+  res.on('finish', cleanup);
+  res.on('close', cleanup);
 
   next();
 };

@@ -38,6 +38,11 @@ export const adminService = {
     return response.data.data;
   },
 
+  async bulkDeleteUsers(userIds) {
+    const response = await apiClient.post('/api/admin/users/bulk-delete', { userIds });
+    return response.data.data;
+  },
+
   async deleteUserResume(userId, resumeId) {
     const response = await apiClient.delete(`/api/admin/users/${userId}/resumes/${resumeId}`);
     return response.data.data;

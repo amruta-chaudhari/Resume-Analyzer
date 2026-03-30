@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getJobDescriptions, createJobDescription, updateJobDescription, deleteJobDescription } from '../services/api';
+import {
+  getJobDescriptions,
+  createJobDescription,
+  updateJobDescription,
+  deleteJobDescription,
+  bulkDeleteJobDescriptions,
+} from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
 
@@ -14,6 +20,8 @@ const JobDescriptionManager = () => {
     description: ''
   });
   const [saving, setSaving] = useState(false);
+  const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadJobDescriptions = async () => {
     try {
@@ -21,10 +29,12 @@ const JobDescriptionManager = () => {
       setError('');
       const data = await getJobDescriptions();
       setJobDescriptions(data || []);
+      setSelectedJobIds((previous) => previous.filter((jobId) => (data || []).some((job) => job.id === jobId)));
     } catch (err) {
       setError(err.message || 'Failed to load job descriptions');
       console.error('Error loading job descriptions:', err);
       setJobDescriptions([]);
+      setSelectedJobIds([]);
     } finally {
       setLoading(false);
     }
@@ -117,6 +127,45 @@ const JobDescriptionManager = () => {
     }
   };
 
+  const toggleJobSelection = (jobId) => {
+    setSelectedJobIds((previous) => (
+      previous.includes(jobId)
+        ? previous.filter((id) => id !== jobId)
+        : [...previous, jobId]
+    ));
+  };
+
+  const selectAllVisible = () => {
+    setSelectedJobIds(jobDescriptions.map((job) => job.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedJobIds([]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedJobIds.length === 0) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedJobIds.length} selected job description(s)?`)) {
+      return;
+    }
+
+    try {
+      setBulkDeleting(true);
+      setError('');
+      await bulkDeleteJobDescriptions(selectedJobIds);
+      await loadJobDescriptions();
+      setSelectedJobIds([]);
+    } catch (err) {
+      setError(err.message || 'Failed to delete selected job descriptions');
+      console.error('Error bulk deleting job descriptions:', err);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -136,7 +185,7 @@ const JobDescriptionManager = () => {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="glass-strong rounded-2xl p-6 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
               Job Description Library
@@ -146,8 +195,10 @@ const JobDescriptionManager = () => {
             </p>
           </div>
           <button
+            type="button"
             onClick={handleCreate}
-            className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center space-x-2"
+            disabled={saving || loading || bulkDeleting}
+            className="px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -155,6 +206,38 @@ const JobDescriptionManager = () => {
             <span>Add Job Description</span>
           </button>
         </div>
+
+        {Array.isArray(jobDescriptions) && jobDescriptions.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+              {selectedJobIds.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={selectAllVisible}
+              disabled={bulkDeleting || loading}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-purple-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={bulkDeleting || loading || selectedJobIds.length === 0}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-purple-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting || loading || selectedJobIds.length === 0}
+              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkDeleting ? 'Deleting...' : 'Delete selected'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <ErrorMessage message={error} />}
@@ -240,13 +323,24 @@ const JobDescriptionManager = () => {
           {Array.isArray(jobDescriptions) && jobDescriptions.map((job) => (
             <div key={job.id} className="glass rounded-2xl p-6 hover:bg-white/5 transition-colors">
               <div className="flex items-start justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex-1 pr-2">
-                  {job.title}
-                </h3>
+                <div className="flex items-start gap-3 flex-1 pr-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedJobIds.includes(job.id)}
+                    onChange={() => toggleJobSelection(job.id)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    aria-label={`Select ${job.title}`}
+                  />
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white truncate">
+                    {job.title}
+                  </h3>
+                </div>
                 <div className="flex space-x-2">
                   <button
+                    type="button"
                     onClick={() => handleEdit(job)}
-                    className="p-1 text-gray-500 hover:text-blue-500 transition-colors"
+                    disabled={bulkDeleting || loading}
+                    className="rounded-lg p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     title="Edit"
                     aria-label="Edit job description"
                   >
@@ -256,8 +350,10 @@ const JobDescriptionManager = () => {
                     </svg>
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleDelete(job.id)}
-                    className="p-1 text-gray-500 hover:text-red-500 transition-colors"
+                    disabled={bulkDeleting || loading}
+                    className="rounded-lg p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     title="Delete"
                     aria-label="Delete job description"
                   >

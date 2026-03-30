@@ -7,7 +7,7 @@ import useTheme from '../hooks/useTheme';
 import { getAnalysisById } from '../services/api';
 import SettingsPanel from '../components/SettingsPanel';
 
-const AnalysisPage = () => {
+const AnalysisPage = ({ embedded = false }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,6 +19,13 @@ const AnalysisPage = () => {
   const [showModelSelector, setShowModelSelector] = useState(false);
 
   useEffect(() => {
+    if (embedded && id === 'new' && location.state?.analysis) {
+      setAnalysis(location.state.analysis);
+      setLoading(false);
+      setError('');
+      return;
+    }
+
     const fetchAnalysis = async () => {
       try {
         setLoading(true);
@@ -47,11 +54,69 @@ const AnalysisPage = () => {
     };
 
     fetchAnalysis();
-  }, [id, location.state]);
+  }, [embedded, id, location.state]);
 
   const handleBackToDashboard = () => {
-    navigate('/dashboard');
+    navigate('/dashboard/analysis');
   };
+
+  if (embedded) {
+    if (loading) {
+      return (
+        <div className="glass-strong rounded-3xl p-8 text-center">
+          <LoadingSpinner label="" />
+          <p className="text-gray-700 dark:text-gray-300 mt-4">Loading analysis...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="max-w-4xl mx-auto space-y-6">
+          <ErrorMessage message={error} />
+          <div className="text-center">
+            <button
+              onClick={handleBackToDashboard}
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
+            >
+              Back to Analyze
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+              Analysis Results
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">
+              Detailed ATS compatibility breakdown for this run.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={handleBackToDashboard}
+              className="px-5 py-2.5 glass rounded-xl hover:bg-white/10 transition-all duration-300 text-gray-700 dark:text-gray-300"
+            >
+              New Analysis
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
+            >
+              Print Results
+            </button>
+          </div>
+        </div>
+
+        <AnalysisResults results={analysis} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

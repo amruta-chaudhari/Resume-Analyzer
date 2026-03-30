@@ -69,6 +69,14 @@ export type AdminLlmAnalyticsFilters = {
   model?: string;
   feature?: string;
   status?: string;
+  userId?: string;
+  minTokens?: number;
+  maxTokens?: number;
+  minCost?: number;
+  maxCost?: number;
+  maxResponseTimeMs?: number;
+  query?: string;
+  limit?: number;
 };
 
 const getCurrentMonthUtcWindow = () => {
@@ -278,6 +286,48 @@ export class LlmUsageService {
       where.status = filters.status;
     }
 
+    if (filters.userId) {
+      where.userId = filters.userId;
+    }
+
+    if (
+      filters.minTokens != null ||
+      filters.maxTokens != null
+    ) {
+      where.tokensUsed = {
+        ...(filters.minTokens != null ? { gte: filters.minTokens } : {}),
+        ...(filters.maxTokens != null ? { lte: filters.maxTokens } : {}),
+      };
+    }
+
+    if (
+      filters.minCost != null ||
+      filters.maxCost != null
+    ) {
+      where.costUsd = {
+        ...(filters.minCost != null ? { gte: filters.minCost } : {}),
+        ...(filters.maxCost != null ? { lte: filters.maxCost } : {}),
+      };
+    }
+
+    if (filters.maxResponseTimeMs != null) {
+      where.responseTimeMs = {
+        lte: filters.maxResponseTimeMs,
+      };
+    }
+
+    if (filters.query) {
+      const query = filters.query.trim();
+      if (query) {
+        where.OR = [
+          { model: { contains: query, mode: 'insensitive' } },
+          { feature: { contains: query, mode: 'insensitive' } },
+          { aiProvider: { contains: query, mode: 'insensitive' } },
+          { userId: { contains: query, mode: 'insensitive' } },
+        ];
+      }
+    }
+
     const rows = await prisma.aiUsage.findMany({
       where,
       orderBy: { createdAt: 'asc' },
@@ -296,6 +346,26 @@ export class LlmUsageService {
         createdAt: true,
       },
     });
+
+    const normalizedLimit = Math.min(Math.max(Number(filters.limit || 50), 10), 200);
+    const events = rows
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, normalizedLimit)
+      .map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        provider: row.aiProvider || 'unknown',
+        model: row.model || 'unknown',
+        feature: row.feature || 'unknown',
+        status: row.status || 'unknown',
+        tokensUsed: row.tokensUsed || 0,
+        promptTokens: row.promptTokens || 0,
+        completionTokens: row.completionTokens || 0,
+        costUsd: roundUsd(row.costUsd || 0),
+        responseTimeMs: row.responseTimeMs || 0,
+        createdAt: row.createdAt.toISOString(),
+      }));
 
     const overview = {
       requests: rows.length,
@@ -357,6 +427,14 @@ export class LlmUsageService {
         model: filters.model || null,
         feature: filters.feature || null,
         status: filters.status || null,
+        userId: filters.userId || null,
+        minTokens: filters.minTokens ?? null,
+        maxTokens: filters.maxTokens ?? null,
+        minCost: filters.minCost ?? null,
+        maxCost: filters.maxCost ?? null,
+        maxResponseTimeMs: filters.maxResponseTimeMs ?? null,
+        query: filters.query || null,
+        limit: normalizedLimit,
       },
       timeseries: Array.from(timeseriesMap.values()).map((entry) => ({
         ...entry,
@@ -373,6 +451,7 @@ export class LlmUsageService {
       userBreakdown: groupMap((row) => row.userId, (row) => ({ userId: row.userId }))
         .sort((a, b) => b.totalCostUsd - a.totalCostUsd || b.requestCount - a.requestCount)
         .slice(0, 20),
+      events,
     };
   }
 }

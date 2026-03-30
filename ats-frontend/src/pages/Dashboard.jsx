@@ -4,6 +4,7 @@ import useAuthStore from '../stores/authStore';
 import { authService } from '../services/authService';
 import { testConnection } from '../services/api';
 import AnalysisDashboard from './AnalysisDashboard';
+import AnalysisPage from './AnalysisPage';
 import ResumeManagementPage from './ResumeManagementPage';
 import HistoryPage from './HistoryPage';
 import JobDescriptionsPage from './JobDescriptionsPage';
@@ -172,6 +173,57 @@ const Dashboard = () => {
 
   const connectionInfo = getConnectionStatusDisplay();
 
+  const navigationItems = [
+    {
+      key: 'analysis',
+      to: '/dashboard/analysis',
+      path: '/analysis',
+      desktopLabel: 'ATS Analysis',
+      mobileLabel: 'Analyze',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'resumes',
+      to: '/dashboard/resumes',
+      path: '/resumes',
+      desktopLabel: 'Resume Library',
+      mobileLabel: 'Resumes',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'jobs',
+      to: '/dashboard/job-descriptions',
+      path: '/job-descriptions',
+      desktopLabel: 'Job Descriptions',
+      mobileLabel: 'Jobs',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'history',
+      to: '/dashboard/history',
+      path: '/history',
+      desktopLabel: 'History & Usage',
+      mobileLabel: 'History',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+  ];
+
   if (loading) {
     return (
       <div className="min-h-screen animated-bg paper-texture flex items-center justify-center">
@@ -184,7 +236,8 @@ const Dashboard = () => {
   }
 
   const isActive = (path) => {
-    return location.pathname === `/dashboard${path}`;
+    const target = `/dashboard${path}`;
+    return location.pathname === target || location.pathname.startsWith(`${target}/`);
   };
 
   return (
@@ -204,7 +257,7 @@ const Dashboard = () => {
         toggleTheme={toggleTheme}
       />
 
-      <div className="container mx-auto px-4 py-8 pb-24 sm:pb-8 relative z-10 fade-in">
+      <div className="container mx-auto px-4 py-6 sm:py-8 pb-28 sm:pb-8 relative z-10 fade-in">
         {/* Header */}
         <div className="text-center mb-12">
           <div className="glass-strong rounded-3xl p-4 sm:p-8 mx-auto max-w-4xl hover-glass">
@@ -283,121 +336,51 @@ const Dashboard = () => {
         </div>
 
         {/* Desktop Navigation Tabs */}
-        <div className="hidden sm:flex justify-center mb-8">
-          <div className="glass-strong rounded-2xl p-2 flex space-x-2">
-            <Link
-              to="/dashboard/analysis"
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                isActive('/analysis')
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
-              }`}
-            >
-              <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              ATS Analysis
-            </Link>
-            <Link
-              to="/dashboard/resumes"
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                isActive('/resumes')
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
-              }`}
-            >
-              <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-               Resume Library
-             </Link>
-             <Link
-               to="/dashboard/job-descriptions"
-               className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                 isActive('/job-descriptions')
-                   ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                   : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
-               }`}
-             >
-               <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-               </svg>
-               Job Descriptions
-             </Link>
-             <Link
-               to="/dashboard/history"
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
-                isActive('/history')
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
-              }`}
-            >
-              <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-               History & Usage
-             </Link>
+        <div className="hidden sm:block mb-8">
+          <div className="glass-strong rounded-2xl p-2 mx-auto max-w-5xl">
+            <div className="flex items-center gap-2 overflow-x-auto px-1">
+              {navigationItems.map((item) => (
+                <Link
+                  key={item.key}
+                  to={item.to}
+                  className={`inline-flex items-center justify-center gap-2 px-4 lg:px-6 py-3 rounded-xl font-medium transition-all duration-300 whitespace-nowrap ${
+                    isActive(item.path)
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.desktopLabel}</span>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Mobile Bottom Navigation */}
         <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-          <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 px-2 py-2">
-            <div className="flex justify-around items-center max-w-md mx-auto">
-              <Link
-                to="/dashboard/analysis"
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
-                  isActive('/analysis')
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span className="text-xs font-medium">Analyze</span>
-              </Link>
-              <Link
-                to="/dashboard/resumes"
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
-                  isActive('/resumes')
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-xs font-medium">Resumes</span>
-              </Link>
-              <Link
-                to="/dashboard/job-descriptions"
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
-                  isActive('/job-descriptions')
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-xs font-medium">JDs</span>
-              </Link>
-              <Link
-                to="/dashboard/history"
-                className={`flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
-                  isActive('/history')
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-xs font-medium">History</span>
-              </Link>
+          <nav
+            className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
+            aria-label="Primary navigation"
+          >
+            <div className="flex justify-around items-center max-w-md mx-auto gap-1">
+              {navigationItems.map((item) => (
+                <Link
+                  key={item.key}
+                  to={item.to}
+                  className={`flex flex-col items-center justify-center px-2 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
+                    isActive(item.path)
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  aria-label={item.desktopLabel}
+                >
+                  <span className="mb-1">{item.icon}</span>
+                  <span className="text-[11px] font-medium truncate">{item.mobileLabel}</span>
+                </Link>
+              ))}
             </div>
-          </div>
+          </nav>
         </div>
 
         {/* Main Content */}
@@ -417,6 +400,7 @@ const Dashboard = () => {
               />
             }
           />
+          <Route path="analysis/:id" element={<AnalysisPage embedded />} />
           <Route path="resumes" element={<ResumeManagementPage />} />
           <Route path="job-descriptions" element={<JobDescriptionsPage />} />
           <Route path="history" element={<HistoryPage />} />

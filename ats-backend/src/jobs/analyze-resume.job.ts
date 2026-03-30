@@ -169,6 +169,23 @@ export const initializeAnalysisJobProcessor = async (): Promise<void> => {
 
         job.progress(90);
 
+        if (analysisResult?.modelUsed?.id) {
+          await tx.aiUsage.updateMany({
+            where: {
+              userId,
+              feature: 'async_resume_analysis',
+              model: analysisResult.modelUsed.id,
+              analysisId: null,
+              createdAt: {
+                gte: new Date(Date.now() - (10 * 60 * 1000)),
+              },
+            },
+            data: {
+              analysisId: analysis.id,
+            },
+          });
+        }
+
         return { jobDesc, resume, analysis };
       });
 

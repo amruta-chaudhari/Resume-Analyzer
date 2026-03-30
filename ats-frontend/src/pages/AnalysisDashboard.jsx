@@ -131,7 +131,7 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
       setAnalysisResult(resolvedAnalysis);
 
       // Redirect to analysis page with the result
-      navigate(`/analysis/${resolvedAnalysis.savedAnalysisId || resolvedAnalysis.id || 'new'}`, {
+      navigate(`/dashboard/analysis/${resolvedAnalysis.savedAnalysisId || resolvedAnalysis.id || 'new'}`, {
         state: { analysis: resolvedAnalysis }
       });
     } catch (err) {
@@ -158,6 +158,20 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
           value={jobDescription}
           onChange={handleJobDescriptionChange}
         />
+      </div>
+
+      <div className="mb-6 glass rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-white">Need better job description organization?</p>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Manage your reusable job descriptions in one place, then select them instantly during analysis.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/job-descriptions')}
+          className="self-start sm:self-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+        >
+          Open Job Description Manager
+        </button>
       </div>
 
       {/* Error Message */}

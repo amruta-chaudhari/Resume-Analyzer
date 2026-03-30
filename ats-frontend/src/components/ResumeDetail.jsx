@@ -32,7 +32,7 @@ const ResumeDetail = ({ resume: initialResume, onBack, onEdit }) => {
         extractJobTitle(jobDescription)
       );
       if (result?.savedAnalysisId || result?.id) {
-        navigate(`/analysis/${result.savedAnalysisId || result.id}`, {
+        navigate(`/dashboard/analysis/${result.savedAnalysisId || result.id}`, {
           state: { analysis: result },
         });
         return;

@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
 import { getResumes, validateFile } from '../services/api';
 
 const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, onSavedResumeSelect }) => {
   const [dragActive, setDragActive] = useState(false);
   const [savedResumes, setSavedResumes] = useState([]);
   const [showSavedResumeDropdown, setShowSavedResumeDropdown] = useState(false);
+  const dropdownId = useId();
+  const dropdownContainerRef = useRef(null);
 
   useEffect(() => {
     const loadResumes = async () => {
@@ -19,6 +21,34 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, o
 
     loadResumes();
   }, []);
+
+  useEffect(() => {
+    if (!showSavedResumeDropdown) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(event.target)) {
+        setShowSavedResumeDropdown(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowSavedResumeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showSavedResumeDropdown]);
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -86,10 +116,13 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, o
         onDrop={handleDrop}
       >
         {savedResumes.length > 0 && (
-          <div className="mb-4 relative text-left">
+          <div ref={dropdownContainerRef} className="mb-4 relative text-left">
             <button
               type="button"
               onClick={() => setShowSavedResumeDropdown((previous) => !previous)}
+              aria-haspopup="listbox"
+              aria-expanded={showSavedResumeDropdown}
+              aria-controls={showSavedResumeDropdown ? dropdownId : undefined}
               className="w-full glass px-4 py-3 rounded-xl flex items-center justify-between text-gray-700 dark:text-gray-300 hover:bg-white/10 transition-colors"
             >
               <span>
@@ -101,11 +134,13 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, o
             </button>
 
             {showSavedResumeDropdown && (
-              <div className="absolute z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl dropdown-glass shadow-lg">
+              <div id={dropdownId} role="listbox" className="absolute z-10 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl dropdown-glass shadow-lg">
                 {savedResumes.map((resume) => (
                   <button
                     key={resume.id}
                     type="button"
+                    role="option"
+                    aria-selected={selectedResume?.id === resume.id}
                     onClick={() => handleSelectSavedResume(resume)}
                     className="w-full border-b border-gray-200 px-4 py-3 text-left transition-colors hover:bg-white/10 dark:border-gray-700 last:border-b-0"
                   >

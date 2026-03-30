@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { getJobDescriptions } from '../services/api';
 
 const JobDescriptionInput = ({ value, onChange }) => {
   const [savedJobs, setSavedJobs] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownId = useId();
+  const dropdownContainerRef = useRef(null);
 
   useEffect(() => {
     const loadSavedJobs = async () => {
@@ -18,6 +20,34 @@ const JobDescriptionInput = ({ value, onChange }) => {
 
     loadSavedJobs();
   }, []);
+
+  useEffect(() => {
+    if (!showDropdown) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showDropdown]);
 
   const handleSelectJob = (job) => {
     onChange(job.description);
@@ -38,9 +68,13 @@ const JobDescriptionInput = ({ value, onChange }) => {
 
       {/* Saved Jobs Dropdown */}
       {Array.isArray(savedJobs) && savedJobs.length > 0 && (
-        <div className="mb-4 relative">
+        <div ref={dropdownContainerRef} className="mb-4 relative">
           <button
+            type="button"
             onClick={() => setShowDropdown(!showDropdown)}
+            aria-haspopup="listbox"
+            aria-expanded={showDropdown}
+            aria-controls={showDropdown ? dropdownId : undefined}
             className="w-full glass px-4 py-2 rounded-lg text-left flex items-center justify-between text-gray-700 dark:text-gray-300 hover:bg-white/10 transition-colors"
           >
             <span>Select from saved job descriptions</span>
@@ -50,10 +84,13 @@ const JobDescriptionInput = ({ value, onChange }) => {
           </button>
 
           {showDropdown && (
-                        <div className="absolute z-10 w-full mt-1 dropdown-glass rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <div id={dropdownId} role="listbox" className="absolute z-10 w-full mt-1 dropdown-glass rounded-lg shadow-lg max-h-60 overflow-y-auto">
               {savedJobs.map((job) => (
                 <button
                   key={job.id}
+                  type="button"
+                  role="option"
+                  aria-selected={value === job.description}
                   onClick={() => handleSelectJob(job)}
                   className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors border-b border-gray-200 dark:border-gray-700 last:border-b-0"
                 >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getResumes, deleteResume, downloadResumeFile } from '../services/api';
+import { getResumes, deleteResume, downloadResumeFile, bulkDeleteResumes } from '../services/api';
 import { Download } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
@@ -11,15 +11,18 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetchResumes = useCallback(async () => {
     try {
       setLoading(true);
       const result = await getResumes(page, 10);
       if (page === 1) {
-        setResumes(result.resumes);
+        setResumes(result.resumes || []);
+        setSelectedIds([]);
       } else {
-        setResumes(prev => [...prev, ...result.resumes]);
+        setResumes((prev) => [...prev, ...(result.resumes || [])]);
       }
       setHasMore(Boolean(result.pagination?.hasNextPage || page < (result.pagination?.totalPages || 0)));
     } catch (err) {
@@ -42,11 +45,33 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
     try {
       setDeletingId(resumeId);
       await deleteResume(resumeId);
-      setResumes(prev => prev.filter(r => r.id !== resumeId));
+      setResumes((prev) => prev.filter((resume) => resume.id !== resumeId));
+      setSelectedIds((prev) => prev.filter((id) => id !== resumeId));
     } catch (err) {
       setError(err.message);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedIds.length} selected resume(s)?`)) {
+      return;
+    }
+
+    try {
+      setBulkDeleting(true);
+      await bulkDeleteResumes(selectedIds);
+      setResumes((prev) => prev.filter((resume) => !selectedIds.includes(resume.id)));
+      setSelectedIds([]);
+    } catch (err) {
+      setError(err.message || 'Failed to bulk delete resumes');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -57,6 +82,27 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
     } catch (err) {
       setError(`Failed to download original file: ${err.message}`);
     }
+  };
+
+  const toggleResumeSelection = (resumeId, event) => {
+    event.stopPropagation();
+    setSelectedIds((previous) =>
+      previous.includes(resumeId)
+        ? previous.filter((id) => id !== resumeId)
+        : [...previous, resumeId]
+    );
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(resumes.map((resume) => resume.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  const stopCardKeyPropagation = (event) => {
+    event.stopPropagation();
   };
 
   const formatDate = (dateString) => {
@@ -77,7 +123,6 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Resume Library</h2>
         <button
@@ -91,9 +136,40 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
         </button>
       </div>
 
+      {resumes.length > 0 && (
+        <div className="glass rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            {selectedIds.length} selected
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={selectAllVisible}
+              className="px-3 py-2 text-xs font-semibold rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+            >
+              Select visible
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="px-3 py-2 text-xs font-semibold rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.length === 0 || bulkDeleting}
+              onClick={handleBulkDelete}
+              className="px-3 py-2 text-xs font-semibold rounded-xl bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkDeleting ? 'Deleting...' : 'Delete Selected'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <ErrorMessage message={error} />}
 
-      {/* Resume Grid */}
       {resumes.length === 0 && !loading ? (
         <div className="text-center py-12">
           <div className="w-24 h-24 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
@@ -126,26 +202,37 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
               role="button"
               tabIndex={0}
             >
-              {/* Resume Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {resume.title}
-                  </h3>
+              <div className="flex items-start justify-between mb-4 gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(resume.id)}
+                      onChange={(event) => toggleResumeSelection(resume.id, event)}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={stopCardKeyPropagation}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      aria-label={`Select ${resume.title}`}
+                    />
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate">
+                      {resume.title}
+                    </h3>
+                  </div>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     Created {formatDate(resume.createdAt)}
                   </p>
                 </div>
                 <div className="flex space-x-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditResume(resume);
-                    }}
-                    className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200"
-                    type="button"
-                    aria-label="Edit resume"
-                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditResume(resume);
+                      }}
+                      onKeyDown={stopCardKeyPropagation}
+                      className="p-2.5 min-h-11 min-w-11 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200"
+                      type="button"
+                      aria-label="Edit resume"
+                    >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
@@ -153,17 +240,20 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
                   {resume.originalFileId && (
                     <button
                       onClick={(e) => handleDownloadOriginal(resume, e)}
-                      className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-all duration-200"
+                      onKeyDown={stopCardKeyPropagation}
+                      className="p-2.5 min-h-11 min-w-11 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-all duration-200"
                       title="Download original file"
                       type="button"
+                      aria-label="Download original resume file"
                     >
                       <Download className="w-4 h-4" />
                     </button>
                   )}
                   <button
                     onClick={(e) => handleDelete(resume.id, e)}
+                    onKeyDown={stopCardKeyPropagation}
                     disabled={deletingId === resume.id}
-                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
+                    className="p-2.5 min-h-11 min-w-11 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
                     type="button"
                     aria-label="Delete resume"
                   >
@@ -178,7 +268,6 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
                 </div>
               </div>
 
-              {/* Resume Preview */}
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-4">
                 <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
                   {(resume.previewText || resume.content || resume.extractedText || 'No preview available').substring(0, 150)}
@@ -186,9 +275,8 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
                 </div>
               </div>
 
-              {/* Resume Stats */}
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="flex items-center text-gray-500 dark:text-gray-400">
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-9 0V1m10 3V1m0 3l1 1v16a2 2 0 01-2 2H6a2 2 0 01-2-2V8l1-1z" />
@@ -213,11 +301,10 @@ const ResumeList = ({ onViewResume, onEditResume, onCreateResume }) => {
         </div>
       )}
 
-      {/* Load More Button */}
       {hasMore && (
         <div className="text-center pt-6">
           <button
-            onClick={() => setPage(prev => prev + 1)}
+            onClick={() => setPage((prev) => prev + 1)}
             disabled={loading}
             className="btn-glass text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 disabled:opacity-50"
           >

@@ -133,6 +133,27 @@ const AdminUsersPage = () => {
     }
   };
 
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUserIds.length === 0) {
+      return;
+    }
+
+    if (!window.confirm('Soft-delete selected users and revoke their active sessions?')) {
+      return;
+    }
+
+    try {
+      setBulkLoading(true);
+      await adminService.bulkDeleteUsers(selectedUserIds);
+      await loadUsers();
+      clearSelection();
+    } catch (error) {
+      setErrorMessage(error.message || 'Bulk delete users failed.');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
       <aside className={`${adminCardClass} h-fit xl:sticky xl:top-6`}>
@@ -209,8 +230,8 @@ const AdminUsersPage = () => {
             <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={handleBulkRevokeSessions} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-semibold text-slate-950 disabled:opacity-40">
               Revoke Sessions
             </button>
-            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ deleted: true }, 'Soft-delete selected users?')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
-              Soft Delete
+            <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={handleBulkDeleteUsers} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
+              Delete Users
             </button>
             <button type="button" disabled={bulkLoading || selectedUserIds.length === 0} onClick={() => applyBulkUpdate({ deleted: false }, 'Restore selected users?')} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
               Restore

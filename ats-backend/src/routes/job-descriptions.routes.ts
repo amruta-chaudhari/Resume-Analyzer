@@ -352,7 +352,57 @@ router.delete('/job-descriptions/:id', authMiddleware, async (req: AuthRequest, 
         });
     } catch (_error: unknown) {
         serverError(res, 'Failed to delete job description');
+  }
+});
+
+/**
+ * POST /api/job-descriptions/bulk-delete - Bulk delete job descriptions
+ * Soft deletes multiple job descriptions owned by the user
+ */
+router.post('/job-descriptions/bulk-delete', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
     }
+
+    const inputIds: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids: string[] = inputIds
+      .map((value: unknown) => String(value || '').trim())
+      .filter((value: string) => Boolean(value));
+
+    if (ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one job description id is required'
+      });
+    }
+
+    const uniqueIds = Array.from(new Set(ids));
+    const result = await prisma.jobDescription.updateMany({
+      where: {
+        userId: req.userId,
+        id: { in: uniqueIds },
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        requested: uniqueIds.length,
+        deleted: result.count,
+        skipped: uniqueIds.length - result.count,
+      }
+    });
+  } catch (_error: unknown) {
+    return serverError(res, 'Failed to bulk delete job descriptions');
+  }
 });
 
 export default router;

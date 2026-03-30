@@ -332,6 +332,38 @@ export class ResumeService {
     });
   }
 
+  async bulkDeleteResumes(userId: string, resumeIds: string[]) {
+    const normalizedIds = Array.from(
+      new Set(
+        (resumeIds || [])
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (normalizedIds.length === 0) {
+      throw new Error('At least one resume id is required');
+    }
+
+    const now = new Date();
+    const result = await prisma.resume.updateMany({
+      where: {
+        userId,
+        id: { in: normalizedIds },
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: now,
+      },
+    });
+
+    return {
+      requested: normalizedIds.length,
+      deleted: result.count,
+      skipped: normalizedIds.length - result.count,
+    };
+  }
+
   /**
    * Exports resume to PDF format
    * Delegates to ResumeExportService

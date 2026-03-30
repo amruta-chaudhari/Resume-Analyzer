@@ -34,7 +34,7 @@ const AnalysisHistory = () => {
   }, []);
 
   const handleViewAnalysis = (analysisId) => {
-    navigate(`/analysis/${analysisId}`);
+    navigate(`/dashboard/analysis/${analysisId}`);
   };
 
   if (loading) {

@@ -661,6 +661,55 @@ export class AdminService {
     };
   }
 
+  async bulkDeleteUsers(userIds: string[], auditContext: AdminAuditContext) {
+    const normalizedUserIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (normalizedUserIds.length === 0) {
+      throw new Error('At least one user is required');
+    }
+
+    const results = [] as Array<{ userId: string; success: boolean; error?: string }>;
+
+    for (const userId of normalizedUserIds) {
+      if (userId === auditContext.actorUserId) {
+        results.push({
+          userId,
+          success: false,
+          error: 'Cannot bulk-delete your own admin account',
+        });
+        continue;
+      }
+
+      try {
+        await this.updateUser(userId, { deleted: true }, auditContext);
+        const revokeResult = await this.revokeUserSessions(userId, auditContext);
+        await this.createAuditLog(prisma, auditContext, {
+          action: 'ADMIN_USER_BULK_DELETED',
+          entityType: 'user',
+          entityId: userId,
+          changes: {
+            revokedSessions: revokeResult.revokedSessions,
+            operation: 'bulk_delete',
+          },
+        });
+        results.push({ userId, success: true });
+      } catch (error) {
+        results.push({
+          userId,
+          success: false,
+          error: error instanceof Error ? error.message : 'Bulk delete failed',
+        });
+      }
+    }
+
+    return {
+      success: true,
+      total: normalizedUserIds.length,
+      succeeded: results.filter((item) => item.success).length,
+      failed: results.filter((item) => !item.success).length,
+      results,
+    };
+  }
+
   async adminDeleteResume(userId: string, resumeId: string, auditContext: AdminAuditContext) {
     return this.runTransaction(async (tx) => {
       await this.requireUser(tx, userId);

@@ -468,6 +468,16 @@ export const deleteJobDescription = async (jobId) => {
   }
 };
 
+export const bulkDeleteJobDescriptions = async (ids = []) => {
+  try {
+    const response = await apiClient.post('/api/job-descriptions/bulk-delete', { ids });
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to bulk delete job descriptions:', error);
+    throw new Error(`Failed to bulk delete job descriptions: ${error.message}`);
+  }
+};
+
 // Resume CRUD operations (updated to use PUT instead of PATCH)
 export const getResumes = async (page = 1, limit = 10) => {
   try {
@@ -561,6 +571,16 @@ export const deleteResume = async (resumeId) => {
   } catch (error) {
     console.error('Failed to delete resume:', error);
     throw new Error(`Failed to delete resume: ${error.message}`);
+  }
+};
+
+export const bulkDeleteResumes = async (ids = []) => {
+  try {
+    const response = await apiClient.post('/api/resumes/bulk-delete', { ids });
+    return response.data.data;
+  } catch (error) {
+    console.error('Failed to bulk delete resumes:', error);
+    throw new Error(`Failed to bulk delete resumes: ${error.message}`);
   }
 };
 

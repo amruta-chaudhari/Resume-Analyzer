@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as d3 from 'd3';
+import { Link } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import { adminCardClass, adminFieldClass } from './shared';
 
@@ -88,7 +89,22 @@ const BarChart = ({ data, labelKey, valueKey, color }) => {
 };
 
 const AdminAnalyticsPage = () => {
-  const [filters, setFilters] = useState({ from: '', to: '', provider: '', feature: '', status: '' });
+  const [filters, setFilters] = useState({
+    from: '',
+    to: '',
+    provider: '',
+    model: '',
+    feature: '',
+    status: '',
+    userId: '',
+    query: '',
+    minTokens: '',
+    maxTokens: '',
+    minCost: '',
+    maxCost: '',
+    maxResponseTimeMs: '',
+    limit: '100',
+  });
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -121,15 +137,27 @@ const AdminAnalyticsPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link to="/admin/analytics/events" className="rounded-2xl border border-slate-300/80 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-cyan-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              Usage events
+            </Link>
             <input type="date" value={filters.from} onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))} className={adminFieldClass} />
             <input type="date" value={filters.to} onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))} className={adminFieldClass} />
             <input type="text" value={filters.provider} onChange={(event) => setFilters((prev) => ({ ...prev, provider: event.target.value }))} placeholder="provider" className={adminFieldClass} />
+            <input type="text" value={filters.model} onChange={(event) => setFilters((prev) => ({ ...prev, model: event.target.value }))} placeholder="model" className={adminFieldClass} />
             <input type="text" value={filters.feature} onChange={(event) => setFilters((prev) => ({ ...prev, feature: event.target.value }))} placeholder="feature" className={adminFieldClass} />
+            <input type="text" value={filters.userId} onChange={(event) => setFilters((prev) => ({ ...prev, userId: event.target.value }))} placeholder="user ID" className={adminFieldClass} />
+            <input type="text" value={filters.query} onChange={(event) => setFilters((prev) => ({ ...prev, query: event.target.value }))} placeholder="search" className={adminFieldClass} />
             <select value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))} className={adminFieldClass}>
               <option value="">All statuses</option>
               <option value="completed">completed</option>
               <option value="failed">failed</option>
             </select>
+            <input type="number" min="0" value={filters.minTokens} onChange={(event) => setFilters((prev) => ({ ...prev, minTokens: event.target.value }))} placeholder="min tokens" className={adminFieldClass} />
+            <input type="number" min="0" value={filters.maxTokens} onChange={(event) => setFilters((prev) => ({ ...prev, maxTokens: event.target.value }))} placeholder="max tokens" className={adminFieldClass} />
+            <input type="number" min="0" step="0.0001" value={filters.minCost} onChange={(event) => setFilters((prev) => ({ ...prev, minCost: event.target.value }))} placeholder="min cost" className={adminFieldClass} />
+            <input type="number" min="0" step="0.0001" value={filters.maxCost} onChange={(event) => setFilters((prev) => ({ ...prev, maxCost: event.target.value }))} placeholder="max cost" className={adminFieldClass} />
+            <input type="number" min="0" value={filters.maxResponseTimeMs} onChange={(event) => setFilters((prev) => ({ ...prev, maxResponseTimeMs: event.target.value }))} placeholder="max latency (ms)" className={adminFieldClass} />
+            <input type="number" min="10" max="200" value={filters.limit} onChange={(event) => setFilters((prev) => ({ ...prev, limit: event.target.value }))} placeholder="events limit" className={adminFieldClass} />
             <button type="button" onClick={loadAnalytics} className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Apply Filters</button>
           </div>
         </div>

@@ -3,8 +3,6 @@ import {
   createResume,
   updateResume,
   createResumeFromFile,
-  parseResumeText,
-  generateResumePreview,
   getTemplates,
   validateFile,
 } from '../services/api';
@@ -20,12 +18,10 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState('');
   const [templates, setTemplates] = useState([
     { id: '', name: 'Blank Template', description: 'Start with a clean slate' }
   ]);
-  const previewCloseButtonRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (resume) {
@@ -59,27 +55,6 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
 
     loadTemplates();
   }, []);
-
-  useEffect(() => {
-    if (showPreview) {
-      previewCloseButtonRef.current?.focus();
-    }
-  }, [showPreview]);
-
-  useEffect(() => {
-    if (!showPreview) {
-      return undefined;
-    }
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setShowPreview(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [showPreview]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -124,63 +99,6 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
       onSave(result);
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleParseWithAI = async () => {
-    if (!formData.content.trim()) {
-      setError('Please enter resume content to parse');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-
-      const result = await parseResumeText(formData.content);
-      setFormData(prev => ({
-        ...prev,
-        content: JSON.stringify(result, null, 2),
-      }));
-    } catch (err) {
-      setError(`AI parsing failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePreview = async () => {
-    if (!formData.content.trim()) {
-      setError('Please enter resume content to preview');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-
-      // For preview, we'll create a temporary structured format
-      let structuredContent;
-      try {
-        structuredContent = JSON.parse(formData.content);
-      } catch {
-        // If not JSON, create basic structure
-        structuredContent = {
-          personalInfo: { fullName: 'Your Name' },
-          summary: formData.content.substring(0, 200) + '...',
-          experience: [],
-          education: [],
-          skills: [],
-        };
-      }
-
-      const html = await generateResumePreview(structuredContent, formData.templateId || null);
-      setPreviewHtml(html);
-      setShowPreview(true);
-    } catch (err) {
-      setError(`Preview failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -274,6 +192,7 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
             </label>
             <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 onChange={(e) => {
@@ -313,7 +232,9 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
                   type="button"
                   onClick={() => {
                     setUploadedFile(null);
-                    document.getElementById('resume-file').value = '';
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = '';
+                    }
                   }}
                   className="mt-4 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
@@ -326,46 +247,20 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
           {/* Optional Manual Text Import */}
           <div>
             <label htmlFor="content" className="block text-lg font-semibold text-gray-800 dark:text-white mb-3">
-              Resume Content (Optional Manual Text Import)
+              Optional Resume Text (Fallback)
             </label>
             <textarea
               id="content"
               name="content"
               value={formData.content}
               onChange={handleChange}
-              placeholder="Only use this if you want to import raw resume text manually instead of uploading a file..."
+              placeholder="Paste plain resume text only if upload is not possible..."
               className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-900 dark:text-white font-mono text-sm resize-vertical h-48 sm:h-80"
               required={!uploadedFile}
             />
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Optional: paste resume text only if you are not uploading a file.
+              Use this only as a fallback when you cannot upload a resume file.
             </p>
-          </div>
-
-          {/* AI Tools */}
-          <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={handleParseWithAI}
-              disabled={loading || !formData.content.trim()}
-              className="flex items-center justify-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-               Parse Imported Text
-            </button>
-            <button
-              type="button"
-              onClick={handlePreview}
-              disabled={loading || !formData.content.trim()}
-              className="flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M9 9h6M9 15h6" />
-              </svg>
-               Preview Imported Text
-            </button>
           </div>
 
           {/* Action Buttons */}
@@ -394,59 +289,6 @@ const ResumeForm = ({ resume, onSave, onCancel, isEditing = false }) => {
           </div>
         </form>
 
-        {/* Preview Button - only shown when editing */}
-        {isEditing && (
-          <div className="mt-6">
-            <button
-              onClick={handlePreview}
-              className="w-full px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all duration-300 flex items-center justify-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M9 9h6M9 15h6" />
-              </svg>
-               Preview Imported Text
-            </button>
-          </div>
-        )}
-
-        {/* Preview Modal */}
-        {showPreview && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="resume-preview-title">
-              <div className="p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 id="resume-preview-title" className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-white">
-                    Resume Preview
-                  </h3>
-                  <button
-                    ref={previewCloseButtonRef}
-                    onClick={() => setShowPreview(false)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    aria-label="Close preview"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <iframe
-                  title="Resume Preview"
-                  className="resume-preview h-[60vh] w-full border-0 rounded-xl bg-white"
-                  sandbox=""
-                  srcDoc={previewHtml}
-                />
-              </div>
-              <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700">
-                <button
-                  onClick={() => setShowPreview(false)}
-                  className="px-6 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
-                >
-                  Close Preview
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
