@@ -43,6 +43,40 @@ const SettingsPanel = ({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen || !panelRef.current) {
+      return undefined;
+    }
+
+    const handleTabTrap = (event) => {
+      if (event.key !== 'Tab' || !panelRef.current) {
+        return;
+      }
+
+      const focusableElements = panelRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleTabTrap);
+    return () => window.removeEventListener('keydown', handleTabTrap);
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen) {
       return undefined;
     }
@@ -152,8 +186,9 @@ const SettingsPanel = ({
                           ? 'bg-blue-600' 
                           : 'bg-gray-300 dark:bg-gray-600'
                       }`}
+                      role="switch"
                       aria-label="Toggle AI model selection"
-                      aria-pressed={showModelSelector}
+                      aria-checked={showModelSelector}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -199,8 +234,9 @@ const SettingsPanel = ({
                           ? 'bg-purple-600' 
                           : 'bg-gray-300 dark:bg-gray-600'
                       }`}
+                      role="switch"
                       aria-label="Toggle theme"
-                      aria-pressed={theme === 'dark'}
+                      aria-checked={theme === 'dark'}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${

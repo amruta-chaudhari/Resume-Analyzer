@@ -114,6 +114,8 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="glass px-3 py-1 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200"
+            aria-expanded={isExpanded}
+            aria-controls="model-selector-list"
           >
             {isExpanded ? 'Hide' : 'Show'} Models
           </button>
@@ -194,7 +196,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
 
       {/* Model List */}
       {isExpanded && (
-        <div className="space-y-2 overflow-y-auto fade-in" style={{ maxHeight: '500px' }}>
+        <div id="model-selector-list" className="space-y-2 overflow-y-auto fade-in" style={{ maxHeight: '500px' }}>
           {loading && models.length > 0 && (
             <div className="text-center py-2">
               <div className="inline-flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
@@ -255,24 +257,19 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                           }
                         </p>
                         {(model.description?.length || 0) > (isMobile ? 120 : 260) && (
-                          <span
-                            role="button"
-                            tabIndex={0}
+                          <button
+                            type="button"
                             onClick={(e) => toggleDescription(model.id, e)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                toggleDescription(model.id, event);
-                              }
-                            }}
                             className={`inline-block text-xs mt-1 transition-colors duration-200 ${
                               isSelected
                                 ? 'text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300'
                                 : 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300'
                             }`}
                             aria-label={expandedDescriptions.has(model.id) ? 'Collapse model description' : 'Expand model description'}
+                            aria-expanded={expandedDescriptions.has(model.id)}
                           >
                             {expandedDescriptions.has(model.id) ? 'See less' : 'See more'}
-                          </span>
+                          </button>
                         )}
                       </div>
                       <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">

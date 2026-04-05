@@ -54,6 +54,18 @@ const JobDescriptionInput = ({ value, onChange }) => {
     setShowDropdown(false);
   };
 
+  const handleClear = () => {
+    if (!value.trim()) {
+      onChange('');
+      return;
+    }
+
+    const shouldClear = window.confirm('Clear the current job description text?');
+    if (shouldClear) {
+      onChange('');
+    }
+  };
+
   return (
     <div className="glass-strong rounded-3xl p-4 sm:p-8 hover-glass transition-all duration-300">
       <h2 id="job-description-input-label" className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center text-gray-800 dark:text-white">
@@ -123,7 +135,7 @@ The more detailed the job description, the better our AI can analyze your resume
         
         {/* Character counter */}
         <div className="absolute bottom-3 sm:bottom-4 right-3 sm:right-4 glass px-2 sm:px-3 py-1 rounded-full">
-          <span className="text-xs text-gray-500 dark:text-gray-100">
+          <span className="text-xs text-gray-500 dark:text-gray-100" aria-live="polite">
             {value.length} characters
           </span>
         </div>
@@ -145,12 +157,14 @@ The more detailed the job description, the better our AI can analyze your resume
       {/* Quick actions */}
       <div className="mt-4 flex flex-col sm:flex-row gap-2 sm:gap-2">
         <button
-          onClick={() => onChange('')}
+          type="button"
+          onClick={handleClear}
           className="glass px-4 py-2 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:bg-red-100/20 dark:hover:bg-red-900/20 transition-colors duration-200 w-full sm:w-auto"
         >
           Clear
         </button>
         <button
+          type="button"
           className="glass px-4 py-2 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200 w-full sm:w-auto"
           onClick={() => {
             const sampleJD = `We are seeking a Senior Software Engineer to join our dynamic team. 

@@ -4,6 +4,7 @@ import KeywordAnalysis from './KeywordAnalysis';
 import ExperienceRelevance from './ExperienceRelevance';
 import FormattingScore from './FormattingScore';
 import ActionableAdvice from './ActionableAdvice';
+import ResumeImprovementOverlay from './ResumeImprovementOverlay';
 import EmptyState from './EmptyState';
 import { downloadResumeFile } from '../services/api';
 
@@ -163,6 +164,9 @@ const AnalysisResults = ({ results }) => {
 
       {/* Row 3: Actionable Improvements */}
       <ActionableAdvice advice={results.actionableAdvice} />
+
+      {/* Row 4: Inline resume review overlay */}
+      <ResumeImprovementOverlay results={results} />
     </div>
   );
 };

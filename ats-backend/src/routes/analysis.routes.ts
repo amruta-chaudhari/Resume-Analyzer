@@ -551,6 +551,7 @@ router.get('/analyses/:id', authMiddleware, async (req: AuthRequest, res: Respon
                         id: true, 
                         title: true, 
                         content: true, 
+                      extractedText: true,
                         createdAt: true,
                         originalFileName: true,
                         originalFileId: true

@@ -14,12 +14,14 @@ import type {
   ModelCache,
   ModelParameters,
   AnalysisResult,
+    InlineResumeSuggestionInput,
   CompletionParameters,
   OpenAICompletion,
   HealthCheckResponse,
 } from '../types/index';
 import { buildDeterministicAtsScorecard } from '../utils/ats-analysis';
 import { assessResumeExtractionQuality, normalizeResumeText } from '../utils/resume-text-processing';
+import { buildResumeReviewOverlay } from '../utils/resume-review-overlay';
 import type { ResumeVisualInput } from '../utils/resume-visual-input';
 
 const SUPPORTED_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,149}$/;
@@ -139,6 +141,14 @@ const DEFAULT_OPENAI_MODEL = 'gpt-5.4-mini';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-haiku-latest';
 const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
 
+const inlineSuggestionSchema = z.object({
+    referenceText: z.string().optional().default(''),
+    suggestion: z.string().optional().default(''),
+    rationale: z.string().optional().default(''),
+    category: z.enum(['skills', 'experience', 'format', 'content', 'impact']).optional().default('content'),
+    severity: z.enum(['high', 'medium', 'low']).optional().default('medium'),
+}).passthrough();
+
 const analysisDraftSchema = z.object({
     overallScore: z.coerce.number().min(0).max(100).optional().default(0),
     skillsAnalysis: z.object({
@@ -158,6 +168,7 @@ const analysisDraftSchema = z.object({
         gaps: z.array(z.string()).optional().default([]),
     }),
     actionableAdvice: z.array(z.string()).optional().default([]),
+    inlineSuggestions: z.array(inlineSuggestionSchema).optional().default([]),
     modelUsed: z.object({
         id: z.string().optional().default(''),
         name: z.string().optional().default(''),
@@ -799,6 +810,15 @@ export class AIService {
     "gaps": ["..."]
   },
   "actionableAdvice": ["..."],
+    "inlineSuggestions": [
+        {
+            "referenceText": "<exact quote copied from resume text>",
+            "suggestion": "<specific improvement>",
+            "rationale": "<why this change matters>",
+            "category": "skills|experience|format|content|impact",
+            "severity": "high|medium|low"
+        }
+    ],
   "modelUsed": {
     "id": "<model used>",
     "name": "<model display name>",
@@ -809,6 +829,8 @@ export class AIService {
 Important rules:
 - The numeric scores above are advisory only; the server will recalculate final ATS scores deterministically.
 - Focus your value on the narrative fields: recommendations, issues, suggestions, relevantExperience, gaps, and actionableAdvice.
+- Include 4-12 inlineSuggestions anchored to exact phrases copied verbatim from the resume text.
+- Keep each referenceText short (4-180 characters) and avoid inventing quotes that do not exist in the resume.
 - When discussing formatting, only describe issues that are observable from extracted text.
 - If dates look inconsistent, recommend one ATS-friendly format such as MMM YYYY.
 - If suggesting quantified achievements, explicitly say to use only accurate numbers the candidate can explain.
@@ -1291,6 +1313,15 @@ ${jobDescription}
                 ...scorecard.formattingScore.suggestions,
                 ...scorecard.experienceRelevance.gaps,
             ]);
+            const inlineSuggestions = parsedDraft.inlineSuggestions as InlineResumeSuggestionInput[];
+            const resumeReviewOverlay = buildResumeReviewOverlay({
+                resumeText: safeResumeText,
+                inlineSuggestions,
+                fallbackSuggestions: actionableAdvice,
+                missingKeywords: scorecard.skillsAnalysis.missingKeywords,
+                formattingIssues: scorecard.formattingScore.issues,
+                experienceGaps: scorecard.experienceRelevance.gaps,
+            });
 
             const analysisResult: AnalysisResult = {
                 overallScore: scorecard.overallScore,
@@ -1326,6 +1357,7 @@ ${jobDescription}
                     ], 6),
                 },
                 actionableAdvice,
+                resumeReviewOverlay,
                 modelUsed: {
                     id: finalModel,
                     name: finalModel,

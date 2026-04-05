@@ -17,6 +17,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Resume Management** - Upload, store, and manage multiple resumes
 - **Export Options** - Download resumes as PDF or Word documents
 - **Analysis History** - Track and revisit all your previous analyses
+- **Inline Resume Improvement Map** - Review suggestions directly on highlighted resume text in the analysis view
 
 ### 📊 Analysis Metrics
 - **Overall Match Score** (0-100) - How well your resume matches the job
@@ -24,6 +25,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Formatting Score** - ATS compatibility and formatting issues
 - **Experience Relevance** - How your experience aligns with requirements
 - **Actionable Advice** - Specific recommendations for improvement
+- **Inline Improvement Anchors** - Context-aware highlights tied to concrete resume snippets
 
 ### 🎨 User Experience
 - **Modern Glassmorphism UI** - Beautiful, responsive design
@@ -212,7 +214,7 @@ VITE_API_URL=http://localhost:3001
 |--------|----------|-------------|
 | POST | `/api/analyze` | Analyze resume vs job description |
 | GET | `/api/analyses` | List analysis history for current user |
-| GET | `/api/analyses/:id` | Get a specific analysis record |
+| GET | `/api/analyses/:id` | Get a specific analysis record (includes `resumeReviewOverlay` and resume extracted text when available) |
 | GET | `/api/analysis/:jobId/status` | Poll status of an analysis job |
 | GET | `/api/usage/summary` | Get usage statistics for current user |
 | GET | `/api/models` | List available AI models |
@@ -305,6 +307,7 @@ Receive detailed feedback including:
 - Formatting issues
 - Experience relevance
 - Specific recommendations
+- Inline highlighted resume map for section-level improvements
 
 ### 5. Iterate and Improve
 Use the actionable advice to update your resume and re-analyze until you achieve your target score.

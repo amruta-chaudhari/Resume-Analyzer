@@ -149,12 +149,48 @@ export interface ModelUsed {
   provider: string;
 }
 
+export type ResumeReviewCategory = 'skills' | 'experience' | 'format' | 'content' | 'impact';
+
+export type ResumeReviewSeverity = 'high' | 'medium' | 'low';
+
+export interface ResumeReviewOverlaySuggestion {
+  id: string;
+  category: ResumeReviewCategory;
+  severity: ResumeReviewSeverity;
+  suggestion: string;
+  rationale?: string;
+  referenceText?: string;
+  status: 'anchored' | 'unmapped';
+  start: number | null;
+  end: number | null;
+  lineStart: number | null;
+  lineEnd: number | null;
+}
+
+export interface ResumeReviewOverlay {
+  resumeText: string;
+  suggestions: ResumeReviewOverlaySuggestion[];
+  summary: {
+    anchored: number;
+    unmapped: number;
+  };
+}
+
+export interface InlineResumeSuggestionInput {
+  referenceText?: string;
+  suggestion?: string;
+  rationale?: string;
+  category?: string;
+  severity?: string;
+}
+
 export interface AnalysisResult {
   overallScore: number;
   skillsAnalysis: SkillsAnalysis;
   formattingScore: FormattingScore;
   experienceRelevance: ExperienceRelevance;
   actionableAdvice: string[];
+  resumeReviewOverlay?: ResumeReviewOverlay;
   modelUsed: ModelUsed;
   analysisWarnings?: string[];
   analysisMethod?: string;

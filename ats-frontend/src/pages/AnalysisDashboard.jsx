@@ -180,6 +180,11 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
       
       {/* Analyze Button - Full Width */}
       <div className="mb-8">
+        {isLoading && (
+          <p className="sr-only" aria-live="polite">
+            Analysis in progress. This can take up to a minute.
+          </p>
+        )}
         <button
           onClick={handleAnalyze}
           disabled={(!resumeFile && !selectedSavedResume) || !jobDescription || isLoading || connectionStatus !== 'connected'}
@@ -192,6 +197,7 @@ const AnalysisDashboard = ({ showModelSelector, selectedModel, modelParameters, 
           {isLoading ? (
             <div className="flex items-center justify-center">
               <LoadingSpinner label="" />
+              <span className="sr-only">Analyzing resume and preparing results.</span>
             </div>
           ) : (
             <div className="flex items-center justify-center space-x-3">

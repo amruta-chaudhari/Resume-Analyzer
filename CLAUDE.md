@@ -10,6 +10,7 @@ This document provides a comprehensive guide for AI assistants (like Claude) wor
 - **AI-Powered Resume Analysis**: Analyzes resumes against job descriptions using OpenRouter API (free models)
 - **Resume Management**: Create, store, and manage multiple resumes (PDF/DOCX upload or manual entry)
 - **ATS Scoring**: Overall match score, keyword analysis, formatting score, experience relevance
+- **Inline Resume Improvement Overlay**: Anchored highlights that map suggested fixes to exact resume snippets
 - **Export Functionality**: Export resumes to PDF and Word formats
 - **User Authentication**: JWT-based auth with access/refresh tokens
 - **Dark/Light Theme**: Persistent theme preference
@@ -68,7 +69,7 @@ This document provides a comprehensive guide for AI assistants (like Claude) wor
 │       ├── resume.service.ts   # Resume CRUD + exports
 │       └── template.service.ts # Template management
 ├── prisma/
-│   └── schema.prisma          # Database schema (9 models)
+│   └── schema.prisma          # Database schema (11 models)
 └── uploads/resumes/           # User-uploaded resume files
 
 /ats-frontend
@@ -115,6 +116,8 @@ This document provides a comprehensive guide for AI assistants (like Claude) wor
 7. **AiUsage** - AI usage tracking
 8. **Subscription** - User subscription info
 9. **AuditLog** - Action logging
+10. **RefreshSession** - Refresh token session lifecycle and revocation state
+11. **SystemSetting** - Global LLM providers, model policy, and admin settings
 
 ### Key Relationships
 - User → Resumes (1:many)
@@ -196,6 +199,7 @@ npm run prisma:generate   # Generate Prisma client
 npm run prisma:migrate    # Run migrations
 npm run dev               # Start dev server (nodemon)
 npm run build             # Compile TypeScript
+npm test                  # Run Jest test suite
 npm start                 # Run production build
 ```
 
@@ -208,6 +212,12 @@ npm install
 npm run dev               # Start Vite dev server (port 3000)
 npm run build             # Build for production
 npm run preview           # Preview production build
+npm run test:unit         # Vitest unit tests
+npm run test:smoke        # Playwright smoke tests
+npm run test:integration  # Playwright integration tests
+npm run test:ci           # Unit + smoke + integration suite
+npm run test:tour         # Guided product tour tests
+npm run presentation:build # Generate presentation assets from tour output
 ```
 
 ---
@@ -216,11 +226,11 @@ npm run preview           # Preview production build
 
 ### AI Analysis Flow
 1. User uploads resume (PDF/DOCX) + pastes job description
-2. Frontend sends to `POST /api/analyze` with optional model parameters
-3. Backend extracts text from resume file
-4. `AIService.analyzeResume()` sends prompt to OpenRouter
-5. Response parsed as JSON with scores and recommendations
-6. Analysis saved to database, returned to frontend
+2. Frontend sends to `POST /api/analyze` and receives a queued `jobId`
+3. Frontend polls `GET /api/analysis/:jobId/status` until the job completes
+4. Backend worker extracts text from resume file and runs `AIService.analyzeResume()`
+5. Response is parsed as JSON, merged with deterministic scoring, and saved to database
+6. Frontend loads `GET /api/analyses/:id` and renders scorecards plus inline resume improvement overlays
 
 ### Model Parameters (Advanced Settings)
 - **Temperature** (0.0-2.0): Controls response creativity

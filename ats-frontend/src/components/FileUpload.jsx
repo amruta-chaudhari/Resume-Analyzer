@@ -158,7 +158,7 @@ const FileUpload = ({ onFileSelect, onFileError, selectedFile, selectedResume, o
         <input
           type="file"
           id="resume-upload"
-          className="hidden"
+          className="sr-only"
           accept=".pdf,.docx"
           onChange={handleFileInput}
         />
