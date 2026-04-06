@@ -48,7 +48,7 @@ Request/interaction shape:
 4. Backend extracts/normalizes resume text.
 5. Analysis pipeline calls selected AI provider.
 6. Result is scored and persisted.
-7. Frontend renders score visualizations, recommendations, and inline resume improvement overlays.
+7. Frontend renders score visualizations, recommendations, inline resume improvement overlays, and a rendered PDF/page overlay preview with hover markers.
 8. User can export resume as PDF/DOCX.
 
 Core principles:

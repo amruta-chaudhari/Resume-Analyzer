@@ -616,6 +616,36 @@ export const downloadResumeFile = async (resumeId, filename) => {
   }
 };
 
+export const getResumeOverlayPdfSource = async (resumeId) => {
+  try {
+    const metadata = await getResumeFileMetadata(resumeId);
+
+    if (metadata?.mimeType === 'application/pdf') {
+      const response = await apiClient.get(`/api/resumes/${resumeId}/file`, {
+        responseType: 'blob',
+      });
+
+      return {
+        blob: response.data,
+        source: 'original_pdf',
+        label: 'Original PDF',
+      };
+    }
+  } catch (_error) {
+    // Fall back to a generated PDF preview.
+  }
+
+  const response = await apiClient.get(`/api/resumes/${resumeId}/export/pdf`, {
+    responseType: 'blob',
+  });
+
+  return {
+    blob: response.data,
+    source: 'generated_pdf',
+    label: 'Generated PDF Preview',
+  };
+};
+
 export const getResumeFileMetadata = async (resumeId) => {
   try {
     const response = await apiClient.get(`/api/resumes/${resumeId}/file/metadata`);

@@ -29,10 +29,16 @@ describe('buildResumeReviewOverlay', () => {
 
     const [firstSuggestion] = overlay.suggestions;
     expect(firstSuggestion.status).toBe('anchored');
+    expect(firstSuggestion.anchorMethod).toBe('exact');
+    expect(firstSuggestion.anchorSection).toBe('Skills');
+    expect(firstSuggestion.anchorBlockIds).toHaveLength(1);
+    expect(firstSuggestion.anchorSnippet).toBe('React, TypeScript, Node.js');
     expect(firstSuggestion.lineStart).toBe(3);
     expect(firstSuggestion.lineEnd).toBe(3);
     expect(firstSuggestion.start).not.toBeNull();
     expect(firstSuggestion.end).not.toBeNull();
+    expect(overlay.document?.sections[0]?.title).toBe('Skills');
+    expect(overlay.document?.blocks.some((block) => block.kind === 'paragraph')).toBe(true);
   });
 
   it('uses section anchors for fallback keyword suggestions', () => {
@@ -54,7 +60,10 @@ describe('buildResumeReviewOverlay', () => {
 
     expect(keywordSuggestion).toBeDefined();
     expect(keywordSuggestion?.status).toBe('anchored');
-    expect(keywordSuggestion?.lineStart).toBe(2);
+    expect(keywordSuggestion?.anchorMethod).toBe('section');
+    expect(keywordSuggestion?.anchorSection).toBe('Skills');
+    expect(keywordSuggestion?.anchorBlockIds?.length).toBeGreaterThan(0);
+    expect(keywordSuggestion?.lineStart).toBe(3);
     expect(overlay.summary.anchored).toBeGreaterThan(0);
   });
 
@@ -70,6 +79,7 @@ describe('buildResumeReviewOverlay', () => {
     });
 
     expect(overlay.resumeText).toBe('');
+    expect(overlay.document).toEqual({ blocks: [], sections: [] });
     expect(overlay.suggestions).toEqual([]);
     expect(overlay.summary).toEqual({ anchored: 0, unmapped: 0 });
   });

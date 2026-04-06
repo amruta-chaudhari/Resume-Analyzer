@@ -18,6 +18,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Export Options** - Download resumes as PDF or Word documents
 - **Analysis History** - Track and revisit all your previous analyses
 - **Inline Resume Improvement Map** - Review suggestions directly on highlighted resume text in the analysis view
+- **Rendered Resume Overlay Preview** - View hoverable improvement icons on top of real rendered resume pages using the original PDF when available
 
 ### 📊 Analysis Metrics
 - **Overall Match Score** (0-100) - How well your resume matches the job
@@ -26,6 +27,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Experience Relevance** - How your experience aligns with requirements
 - **Actionable Advice** - Specific recommendations for improvement
 - **Inline Improvement Anchors** - Context-aware highlights tied to concrete resume snippets
+- **Real Page Overlay Markers** - Hoverable `i` markers mapped onto rendered PDF resume pages for page-accurate review
 
 ### 🎨 User Experience
 - **Modern Glassmorphism UI** - Beautiful, responsive design
@@ -58,6 +60,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 | Tailwind CSS | Styling |
 | Axios | HTTP Client |
 | Lucide React | Icons |
+| pdfjs-dist | PDF page rendering + text coordinates |
 
 ---
 
@@ -133,9 +136,19 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
    ```
 
 4. **Open the app**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
-   - Health Check: http://localhost:3001/api/health
+    - Frontend: http://localhost:3000
+    - Backend API: http://localhost:3001
+    - Health Check: http://localhost:3001/api/health
+
+---
+
+## 🧭 Resume Overlay Modes
+
+- **Inline Resume Improvement Map** uses text anchors from the saved analysis payload.
+- **Rendered Resume Overlay Preview** renders the real resume pages underneath those results and places hoverable info markers on top of matched snippets.
+- If the uploaded resume is already a PDF, the app uses the original file for page rendering.
+- If the uploaded resume is not a PDF, the app falls back to a generated PDF preview so the user still gets a page-style overlay surface.
+- If page-level coordinates cannot be resolved, the analysis page still shows the text-based review canvas and inline map.
 
 ---
 
