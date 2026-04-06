@@ -130,6 +130,57 @@ export interface FormattingScore {
   score: number;
   issues: string[];
   suggestions: string[];
+  details?: FormattingDiagnostics;
+}
+
+export interface FormattingDiagnostics {
+  contact: {
+    emailDetected: boolean;
+    phoneDetected: boolean;
+    obfuscatedContactDetected: boolean;
+    contactPlacement: 'top' | 'missing' | 'later';
+    internationalPhoneDetected: boolean;
+  };
+  sections: {
+    detected: string[];
+    standardCount: number;
+    creativeCount: number;
+    embeddedCount: number;
+  };
+  layout: {
+    probableTableLines: number;
+    probableMultiColumn: boolean;
+    extremeIndentation: boolean;
+    repeatedHeaderFooterArtifacts: number;
+  };
+  bullets: {
+    experienceLineCount: number;
+    bulletLikeLines: number;
+    decorativeBulletCount: number;
+    paragraphOnlyExperience: boolean;
+  };
+  dates: {
+    styles: string[];
+    dateCount: number;
+    chronologyIssues: number;
+    hasParseableDates: boolean;
+  };
+  density: {
+    lineCount: number;
+    wordCount: number;
+    isLong: boolean;
+    isDense: boolean;
+  };
+  specialCharacters: {
+    count: number;
+    ratio: number;
+    nonAsciiRatio: number;
+    highRatio: boolean;
+  };
+  visual?: {
+    imageOrLogoMentions: boolean;
+    likelyImageBased: boolean;
+  };
 }
 
 export interface FormattingAnalysis {

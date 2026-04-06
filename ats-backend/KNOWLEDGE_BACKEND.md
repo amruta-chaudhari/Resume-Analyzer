@@ -130,7 +130,7 @@ Responsibilities:
 - provider/model resolution
 - model list retrieval + caching
 - core resume analysis orchestration
-- formatting heuristics and score structuring
+- deterministic formatting heuristics, checklist-style diagnostics, and score structuring
 
 Provider model:
 
@@ -167,6 +167,11 @@ Responsibilities:
 
 - parse raw resume text into structured schema using AI
 - normalize and extract plain text from structured objects
+
+Formatting analysis notes:
+
+- `src/utils/ats-analysis.ts` emits structured diagnostics for contact placement, obfuscated contact text, headings, table/multi-column hints, bullets, dates, density, and special-character noise.
+- `src/services/ai.service.ts` keeps the deterministic formatting score authoritative and can use an attached resume image to ask the model for grounded layout observations.
 
 ### Versioning service: `src/services/resume-version.service.ts`
 

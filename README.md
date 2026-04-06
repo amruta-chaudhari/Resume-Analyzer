@@ -23,7 +23,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 ### 📊 Analysis Metrics
 - **Overall Match Score** (0-100) - How well your resume matches the job
 - **Keyword Analysis** - Matched and missing keywords from the job description
-- **Formatting Score** - ATS compatibility and formatting issues
+- **Formatting Score** - ATS compatibility plus structured diagnostics for contact info, headings, layout, bullets, and date consistency
 - **Experience Relevance** - How your experience aligns with requirements
 - **Actionable Advice** - Specific recommendations for improvement
 - **Inline Improvement Anchors** - Context-aware highlights tied to concrete resume snippets
@@ -33,7 +33,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Modern Glassmorphism UI** - Beautiful, responsive design
 - **Dark/Light Theme** - Persistent theme preference
 - **Mobile-Friendly** - Works great on all devices
-- **Real-time Feedback** - Instant analysis results
+- **Real-time Feedback** - Instant analysis results with deterministic formatting diagnostics and visual-preview aware review when a PDF is available
 
 ---
 

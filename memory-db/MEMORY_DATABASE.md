@@ -73,7 +73,7 @@ Pipeline summary:
 1. `POST /api/analyze` validates input and enqueues job.
 2. Worker extracts text and optional visual input (for vision-capable models).
 3. AI service runs provider/model call and parses output.
-4. Deterministic ATS scorecard is merged with LLM narrative output.
+4. Deterministic ATS scorecard is merged with LLM narrative output, with structured formatting diagnostics for contact, headings, layout, bullets, and date quality.
 5. Analysis, usage, and related entities are persisted.
 6. UI polls `GET /api/analysis/:jobId/status`.
 
@@ -211,6 +211,7 @@ Core files:
 - `ats-frontend/src/components/KeywordAnalysis.jsx`
 - `ats-frontend/src/components/ExperienceRelevance.jsx`
 - `ats-frontend/src/components/FormattingScore.jsx`
+- `ats-frontend/src/components/__tests__/FormattingScore.test.jsx`
 - `ats-frontend/src/components/ActionableAdvice.jsx`
 - `ats-frontend/src/components/ScoreRing.jsx`
 - `ats-frontend/src/components/FileUpload.jsx`
@@ -333,6 +334,7 @@ If user asks about this topic, start here:
 - Auth tokens and sessions -> `ats-backend/src/services/auth.service.ts`, `ats-frontend/src/services/api.js`, `ats-frontend/src/stores/authStore.js`
 - Resume upload and parsing -> `ats-backend/src/routes/resume.routes.ts`, `ats-backend/src/services/resume-file.service.ts`
 - ATS scoring logic -> `ats-backend/src/utils/ats-analysis.ts`, `ats-backend/src/services/ai.service.ts`
+- ATS formatting diagnostics -> `ats-backend/src/utils/ats-analysis.ts`, `ats-frontend/src/components/FormattingScore.jsx`
 - Queue and async jobs -> `ats-backend/src/queues/analysis.queue.ts`, `ats-backend/src/jobs/analyze-resume.job.ts`
 - Admin settings and plan limits -> `ats-backend/src/routes/admin.settings.routes.ts`, `ats-backend/src/services/system-settings.service.ts`, `ats-frontend/src/components/admin/SystemSettingsPanel.jsx`
 - Usage analytics and cost -> `ats-backend/src/services/llm-usage.service.ts`, `ats-frontend/src/pages/admin/AdminAnalyticsPage.jsx`, `ats-frontend/src/components/UsageSummaryCard.jsx`

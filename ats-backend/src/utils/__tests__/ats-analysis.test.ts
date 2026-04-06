@@ -126,4 +126,64 @@ describe('buildDeterministicAtsScorecard', () => {
       expect.arrayContaining(['Inconsistent date formats were detected across the resume.'])
     );
   });
+
+  it('detects obfuscated contact details and places them in the issue list', () => {
+    const resumeText = `
+      Jane Doe
+      jane [at] example [dot] com
+      EXPERIENCE
+      Developer
+      Jan 2023 - Present
+      - Built React dashboards
+    `;
+
+    const result = buildDeterministicAtsScorecard(resumeText, 'Need React experience');
+
+    expect(result.formattingScore.issues).toEqual(
+      expect.arrayContaining(['Contact information appears obfuscated, which makes it harder for recruiters and ATS tools to read.'])
+    );
+    expect(result.formattingScore.details?.contact.obfuscatedContactDetected).toBe(true);
+    expect(result.formattingScore.details?.contact.emailDetected).toBe(false);
+  });
+
+  it('flags table-like layout, decorative bullets, and missing parseable dates', () => {
+    const resumeText = [
+      'Jane Doe',
+      'jane@example.com | 555-123-4567',
+      'experience    skills    education',
+      'Role One        Company A        2023',
+      'Projects        Tools        Notes',
+      '• Built dashboards for 200 users',
+      '• Improved workflow automation by 30%',
+      'Component A        Component B        Component C',
+    ].join('\n');
+
+    const result = buildDeterministicAtsScorecard(resumeText, 'Looking for a resume with communication skills');
+
+    expect(result.formattingScore.issues).toEqual(
+      expect.arrayContaining([
+        'Possible table or multi-column formatting was detected in the extracted text.',
+        'Decorative bullets or symbols were detected in the resume text.',
+        'No clearly parseable dates were detected in the resume text.',
+      ])
+    );
+    expect(result.formattingScore.details?.layout.probableMultiColumn).toBe(true);
+    expect(result.formattingScore.details?.dates.hasParseableDates).toBe(false);
+  });
+
+  it('captures non-ASCII heavy resumes without over-penalizing normal names', () => {
+    const resumeText = `
+      José Álvarez
+      jose@example.com | 555-123-4567
+      EXPERIENCE
+      Ingeniero
+      Jan 2023 - Present
+      - Delivered localized UX in español and português for 2 regions.
+    `;
+
+    const result = buildDeterministicAtsScorecard(resumeText, 'Need localization and UX experience');
+
+    expect(result.formattingScore.details?.specialCharacters.nonAsciiRatio).toBeGreaterThan(0);
+    expect(result.formattingScore.score).toBeGreaterThan(0);
+  });
 });

@@ -118,6 +118,7 @@ Analysis visualization:
 - `AnalysisResults.jsx`
 - `KeywordAnalysis.jsx`
 - `FormattingScore.jsx`
+  - renders formatting score, issue list, and structured diagnostics when present
 - `ExperienceRelevance.jsx`
 - `ActionableAdvice.jsx`
 - `ResumeImprovementOverlay.jsx`

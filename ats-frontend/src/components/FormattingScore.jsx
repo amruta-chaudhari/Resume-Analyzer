@@ -35,6 +35,30 @@ const FormattingScore = ({ formatting }) => {
 
   const issues = Array.isArray(formatting.issues) ? formatting.issues : [];
   const suggestions = Array.isArray(formatting.suggestions) ? formatting.suggestions : [];
+  const details = formatting.details || null;
+
+  const signalCards = details ? [
+    {
+      label: 'Contact',
+      value: `${details.contact.emailDetected ? 'Email' : 'No email'} • ${details.contact.phoneDetected ? 'Phone' : 'No phone'}`,
+      note: details.contact.obfuscatedContactDetected ? 'Obfuscated contact detected' : `Placement: ${details.contact.contactPlacement}`,
+    },
+    {
+      label: 'Sections',
+      value: `${details.sections.standardCount} standard`,
+      note: `${details.sections.creativeCount} creative • ${details.sections.embeddedCount} embedded`,
+    },
+    {
+      label: 'Layout',
+      value: `${details.layout.probableTableLines} table-like`,
+      note: `${details.layout.probableMultiColumn ? 'multi-column hint' : 'single-column'} • ${details.layout.extremeIndentation ? 'deep indentation' : 'indentation normal'}`,
+    },
+    {
+      label: 'Dates',
+      value: `${details.dates.dateCount} ranges`,
+      note: `${details.dates.styles.length ? details.dates.styles.join(', ') : 'No parsed dates'}${details.dates.chronologyIssues > 0 ? ' • chronology issue' : ''}`,
+    },
+  ] : [];
 
   return (
     <div className="glass-strong rounded-3xl p-8 hover-glass transition-all duration-300 slide-up">
@@ -74,6 +98,18 @@ const FormattingScore = ({ formatting }) => {
           Based on deterministic checks for sections, dates, contact placement, layout signals, and parser-friendly structure.
         </p>
       </div>
+
+      {signalCards.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
+          {signalCards.map((card) => (
+            <div key={card.label} className="glass rounded-2xl p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{card.label}</p>
+              <p className="mt-2 text-base font-semibold text-gray-800 dark:text-white">{card.value}</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{card.note}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-6">
         <div className="glass rounded-2xl p-4">

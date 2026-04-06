@@ -6,7 +6,7 @@ Purpose: Capture updates likely missing from an older progress report.
 ## 1) Major Enhancements Since Baseline ATS App
 
 - Added asynchronous analysis pipeline with queue job submission and status polling.
-- Introduced hybrid ATS scoring: deterministic scoring engine plus LLM-generated narrative feedback.
+- Introduced hybrid ATS scoring: deterministic scoring engine plus LLM-generated narrative feedback, with checklist-style formatting diagnostics.
 - Expanded to multi-provider AI support (OpenRouter/OpenAI/Anthropic/Gemini) with provider/model governance.
 - Built enterprise-style admin console with user operations, system settings, analytics, and usage-event views.
 - Implemented advanced LLM governance: per-plan and per-user limits for budget, tokens, requests, providers, and models.

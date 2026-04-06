@@ -58,7 +58,7 @@ Scope: Quick meaning map for major files and modules.
 
 - `ats-backend/src/queues/analysis.queue.ts` - queue abstraction + local fallback.
 - `ats-backend/src/jobs/analyze-resume.job.ts` - worker processor for analysis jobs.
-- `ats-backend/src/utils/ats-analysis.ts` - deterministic ATS scoring and keyword heuristics.
+- `ats-backend/src/utils/ats-analysis.ts` - deterministic ATS scoring, formatting diagnostics, and keyword heuristics.
 - `ats-backend/src/utils/resume-text-processing.ts` - text cleanup and quality checks.
 - `ats-backend/src/utils/resume-text-extractor.ts` - structured resume to text conversion.
 - `ats-backend/src/utils/resume-visual-input.ts` - image/PDF visual payload generation.
@@ -99,7 +99,7 @@ Scope: Quick meaning map for major files and modules.
 - `ats-frontend/src/components/ActionableAdvice.jsx` - recommendation checklist.
 - `ats-frontend/src/components/KeywordAnalysis.jsx` - keyword matched/missing analysis.
 - `ats-frontend/src/components/ExperienceRelevance.jsx` - experience score panel.
-- `ats-frontend/src/components/FormattingScore.jsx` - formatting diagnostics panel.
+- `ats-frontend/src/components/FormattingScore.jsx` - formatting diagnostics panel with structured checklist signals.
 - `ats-frontend/src/components/ScoreRing.jsx` - circular score visualization.
 - `ats-frontend/src/components/FileUpload.jsx` - file/saved resume selector.
 - `ats-frontend/src/components/JobDescriptionInput.jsx` - JD input and quick actions.

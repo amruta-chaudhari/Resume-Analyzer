@@ -105,6 +105,15 @@ const SECTION_HEADERS = [
   'objective',
 ];
 
+const CREATIVE_SECTION_HINTS = /\b(?:about me|who i am|what i bring|profile|capabilities|strengths|highlights|selected work|professional profile|career summary)\b/i;
+const EMBEDDED_SECTION_HINTS = /(?:^|\s)(?:experience|education|skills|projects|summary|objective|certifications|awards)(?:\s+and\s+|\s+\/\s+|\s*&\s*)(?:experience|education|skills|projects|summary|objective|certifications|awards)/i;
+const OBSCURED_EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+\s*(?:\(|\[|\{)?\s*(?:at|@)\s*(?:\)|\]|\})?\s*[A-Za-z0-9.-]+\s*(?:\(|\[|\{)?\s*(?:dot|\.)\s*(?:\)|\]|\})?\s*[A-Za-z]{2,}\b/i;
+const INTERNATIONAL_PHONE_PATTERN = /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{1,4}\)?[\s.-]?)?\d{1,4}[\s.-]\d{1,4}[\s.-]\d{2,6}(?:[\s.-]?\d{1,6})?/;
+const DECORATIVE_BULLET_PATTERN = /[•◦‣⁃∙⁌⁍➤➢→◆◇■□▪▫●◎❖✦✧✪✩✫✬✭✮✯✰]/g;
+const HEADER_FOOTER_HINTS = /\b(?:page\s+\d+|p\.?\s*\d+|confidential|resume|curriculum vitae|linkedin\.com|github\.com|portfolio|contact)\b/i;
+const IMAGE_LOGO_HINTS = /\b(?:image|logo|photo|headshot|avatar|icon)\b/i;
+const NON_ASCII_LETTER_PATTERN = /[^\x00-\x7F]/g;
+
 const KEYWORD_STOPWORDS = new Set([
   'ability',
   'about',
@@ -700,23 +709,57 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
   const firstLines = lines.slice(0, 6).join(' ');
   const hasEmail = /[^\s@]+@[^\s@]+\.[^\s@]+/.test(firstLines);
   const hasPhone = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\d{3}[\s.-]?\d{3}[\s.-]?\d{4})/.test(firstLines);
+  const hasInternationalPhone = INTERNATIONAL_PHONE_PATTERN.test(firstLines);
+  const obfuscatedContactDetected = OBSCURED_EMAIL_PATTERN.test(resumeText);
   const foundSections = SECTION_HEADERS.filter((section) =>
     lines.some((line) => line.toLowerCase() === section || line.toLowerCase().startsWith(`${section} `))
   );
+  const creativeSections = lines.filter((line) => CREATIVE_SECTION_HINTS.test(line)).length;
+  const embeddedSections = lines.filter((line) => EMBEDDED_SECTION_HINTS.test(line)).length;
   const specialCharCount = (resumeText.match(/[^A-Za-z0-9\s.,;:()/%+&@#\-]/g) || []).length;
   const alphanumericCount = (resumeText.match(/[A-Za-z0-9]/g) || []).length;
   const specialCharRatio = alphanumericCount > 0 ? specialCharCount / alphanumericCount : 0;
   const probableTableLines = lines.filter((line) => line.includes('\t') || /\S\s{5,}\S/.test(line));
+  const multiColumnHints = lines.filter((line) => /\S\s{3,}\S\s{3,}\S/.test(line) || /\b(?:and|with|for|to)\b\s{3,}\S/.test(line)).length;
   const dateStyleMatches = Array.from(resumeText.matchAll(new RegExp(DATE_TOKEN_SOURCE, 'gi')))
     .map((match) => classifyDateStyle(match[0]))
     .filter((style) => style !== 'present' && style !== 'unknown' && style !== 'YYYY');
   const dateStyles = dedupeStrings(dateStyleMatches);
+  const dateRangeMatches = Array.from(resumeText.matchAll(DATE_RANGE_REGEX));
+  let chronologyIssueCount = 0;
 
-  if (!hasEmail || !hasPhone) {
+  const topContactLines = lines.slice(0, 2).join(' ');
+  const contactPlacement: 'top' | 'later' | 'missing' = hasEmail || hasPhone ? 'top' : (resumeText.toLowerCase().includes('@') || /\d/.test(resumeText) ? 'later' : 'missing');
+
+  if (!hasEmail) {
     addIssue(
-      'Contact information is not clearly detectable at the top of the resume.',
-      'Place your primary email address and phone number in the first lines of the document.',
-      16
+      obfuscatedContactDetected
+        ? 'Contact information appears obfuscated, which makes it harder for recruiters and ATS tools to read.'
+        : 'Email address is missing from the top of the resume.',
+      obfuscatedContactDetected
+        ? 'Write your email in a standard format so ATS tools can parse it reliably.'
+        : 'Place your primary email address in the first two lines of the document.',
+      obfuscatedContactDetected ? 10 : 12
+    );
+  }
+
+  if (!hasPhone) {
+    addIssue(
+      hasInternationalPhone
+        ? 'Phone number appears to use a non-standard or international format that may be parsed inconsistently.'
+        : 'Phone number is missing from the top of the resume.',
+      hasInternationalPhone
+        ? 'Keep the number readable and include country code separators only where needed for clarity.'
+        : 'Place your primary phone number in the first two lines of the document.',
+      hasInternationalPhone ? 6 : 10
+    );
+  }
+
+  if (hasEmail && hasPhone && !/^.*(@|\+?\d)/.test(topContactLines)) {
+    addIssue(
+      'Contact information is present but not clearly placed in the first lines of the resume.',
+      'Move your email and phone number to the top of the resume so ATS parsers can find them quickly.',
+      6
     );
   }
 
@@ -728,6 +771,22 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
     );
   }
 
+  if (creativeSections > 0) {
+    addIssue(
+      'Creative section names were detected instead of standard ATS headings.',
+      'Prefer simple section titles like EXPERIENCE, SKILLS, EDUCATION, and PROJECTS.',
+      6
+    );
+  }
+
+  if (embeddedSections > 0) {
+    addIssue(
+      'Some section headings appear embedded inside longer phrases.',
+      'Place each section heading on its own line so ATS parsers can split content reliably.',
+      5
+    );
+  }
+
   if (specialCharRatio > 0.05) {
     addIssue(
       'The resume contains a high number of special characters that can interfere with parsing.',
@@ -736,11 +795,47 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
     );
   }
 
-  if (probableTableLines.length > 2) {
+  const decorativeBulletCount = (resumeText.match(DECORATIVE_BULLET_PATTERN) || []).length;
+  if (decorativeBulletCount > 0) {
+    addIssue(
+      'Decorative bullets or symbols were detected in the resume text.',
+      'Use standard hyphen or asterisk bullets so the text is easier for ATS tools to scan.',
+      decorativeBulletCount > 3 ? 6 : 3
+    );
+  }
+
+  if (probableTableLines.length > 2 || multiColumnHints > 2) {
     addIssue(
       'Possible table or multi-column formatting was detected in the extracted text.',
       'Use a single-column layout with left-aligned content so ATS systems read the resume in order.',
       12
+    );
+  }
+
+  const indentationRuns = lines.filter((line) => /^\s{6,}\S/.test(line)).length;
+  if (indentationRuns > 2) {
+    addIssue(
+      'The resume uses deep indentation that may resemble columns or nested blocks.',
+      'Keep indentation shallow and consistent so the reading order stays linear.',
+      4
+    );
+  }
+
+  const footerHeaderArtifacts = lines.filter((line) => HEADER_FOOTER_HINTS.test(line)).length;
+  if (footerHeaderArtifacts > 2) {
+    addIssue(
+      'Repeated header/footer-style text was detected in the extracted content.',
+      'Remove page headers, footers, and repeated contact blocks from the exported resume.',
+      4
+    );
+  }
+
+  const imageLogoMentions = lines.filter((line) => IMAGE_LOGO_HINTS.test(line)).length;
+  if (imageLogoMentions > 0) {
+    addIssue(
+      'Image, logo, or photo markers were detected in the resume text.',
+      'Avoid non-text objects for critical content because ATS systems often ignore them.',
+      3
     );
   }
 
@@ -760,7 +855,7 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
     );
   }
 
-  const chronologyIssues = Array.from(resumeText.matchAll(DATE_RANGE_REGEX)).some((match) => {
+  const chronologyIssues = dateRangeMatches.some((match) => {
     const start = parseDateToken(match[1]);
     const end = parseDateToken(match[2]);
     if (!start || !end) {
@@ -771,6 +866,7 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
     if (startValue == null || endValue == null || !Number.isFinite(endValue)) {
       return false;
     }
+    chronologyIssueCount += 1;
     return startValue > endValue;
   });
 
@@ -784,6 +880,7 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
 
   const experienceLines = getSectionLines(resumeText, ['experience', 'work experience', 'professional experience']);
   const bulletLikeLines = experienceLines.filter((line) => /^[-*]/.test(line));
+  const decorativeBulletsInExperience = experienceLines.filter((line) => (line.match(new RegExp(DECORATIVE_BULLET_PATTERN.source, 'g')) || []).length > 0).length;
   if (experienceLines.length >= 6 && bulletLikeLines.length === 0) {
     addIssue(
       'Experience content is present but bullets are hard to distinguish in the extracted text.',
@@ -792,14 +889,110 @@ const buildFormattingScore = (resumeText: string): FormattingScore & { warnings:
     );
   }
 
+  if (experienceLines.length >= 6 && bulletLikeLines.length > 0 && bulletLikeLines.length < Math.min(3, experienceLines.length)) {
+    addIssue(
+      'Experience bullets are present but the section still reads like dense paragraphs.',
+      'Keep each accomplishment as a short bullet with one clear outcome or responsibility.',
+      3
+    );
+  }
+
+  if (decorativeBulletsInExperience > 0) {
+    addIssue(
+      'Experience bullets use decorative symbols that can be harder for ATS parsers to normalize.',
+      'Switch to standard bullets like hyphen or asterisk characters.',
+      4
+    );
+  }
+
+  const hasParseableDates = dateStyles.length > 0;
+  if (!hasParseableDates) {
+    addIssue(
+      'No clearly parseable dates were detected in the resume text.',
+      'Use readable date ranges like Jan 2023 - Present so timeline-based scoring stays accurate.',
+      4
+    );
+  }
+
   if (dateStyles.length === 0) {
     warnings.push('No clearly parseable resume dates were detected, so timeline scoring may be conservative.');
   }
+
+  const nonAsciiLetterCount = (resumeText.match(NON_ASCII_LETTER_PATTERN) || []).length;
+  const nonAsciiRatio = alphanumericCount > 0 ? nonAsciiLetterCount / alphanumericCount : 0;
+
+  if (nonAsciiRatio > 0.12 && nonAsciiLetterCount > 20) {
+    addIssue(
+      'The extracted resume text contains a high amount of non-ASCII characters.',
+      'Keep special characters limited to names or domain-specific terms so ATS parsers do not misread the document.',
+      3
+    );
+  }
+
+  const isLong = lines.length > 110 || resumeText.split(/\s+/).filter(Boolean).length > 950;
+  const isDense = resumeText.split(/\s+/).filter(Boolean).length > 700 && lines.length < 55;
+
+  const details = {
+    contact: {
+      emailDetected: hasEmail,
+      phoneDetected: hasPhone,
+      obfuscatedContactDetected,
+      contactPlacement,
+      internationalPhoneDetected: hasInternationalPhone,
+    },
+    sections: {
+      detected: foundSections,
+      standardCount: foundSections.length,
+      creativeCount: creativeSections,
+      embeddedCount: embeddedSections,
+    },
+    layout: {
+      probableTableLines: probableTableLines.length,
+      probableMultiColumn: probableTableLines.length > 2 || multiColumnHints > 2,
+      extremeIndentation: indentationRuns > 2,
+      repeatedHeaderFooterArtifacts: footerHeaderArtifacts,
+    },
+    bullets: {
+      experienceLineCount: experienceLines.length,
+      bulletLikeLines: bulletLikeLines.length,
+      decorativeBulletCount: decorativeBulletsInExperience,
+      paragraphOnlyExperience: experienceLines.length >= 6 && bulletLikeLines.length === 0,
+    },
+    dates: {
+      styles: dateStyles,
+      dateCount: dateRangeMatches.length,
+      chronologyIssues: chronologyIssueCount,
+      hasParseableDates,
+    },
+    density: {
+      lineCount: lines.length,
+      wordCount: resumeText.split(/\s+/).filter(Boolean).length,
+      isLong,
+      isDense,
+    },
+    specialCharacters: {
+      count: specialCharCount,
+      ratio: Number(specialCharRatio.toFixed(3)),
+      nonAsciiRatio: Number((alphanumericCount > 0 ? nonAsciiLetterCount / alphanumericCount : 0).toFixed(3)),
+      highRatio: specialCharRatio > 0.05,
+    },
+    visual: {
+      imageOrLogoMentions: imageLogoMentions > 0,
+      likelyImageBased: false,
+    },
+  };
 
   return {
     score: clampScore(100 - deductionTotal),
     issues: detectedIssues,
     suggestions,
+    details: {
+      ...details,
+    specialCharacters: {
+      ...details.specialCharacters,
+      highRatio: specialCharRatio > 0.05,
+    },
+    },
     warnings,
   };
 };
@@ -825,6 +1018,7 @@ export const buildDeterministicAtsScorecard = (
       score: formattingEvaluation.score,
       issues: formattingEvaluation.issues,
       suggestions: formattingEvaluation.suggestions,
+      details: formattingEvaluation.details,
     },
     experienceRelevance,
     overallScore,
