@@ -27,11 +27,32 @@ export class ResumeExportService {
     }
 
     // Parse resume content for structured data
+    const structuredFromField = (resume as any).structuredData
+      ? safeJsonParse<Record<string, any> | null>((resume as any).structuredData, null)
+      : null;
     let structuredContent: any;
-    if (typeof resume.content === 'string') {
+    const fallbackText = (resume.extractedText || (typeof resume.content === 'string' ? resume.content : '') || '').trim();
+    const buildFallbackStructuredContent = () => {
+      const lines = fallbackText.split('\n').map((line) => line.trim()).filter(Boolean);
+      return {
+        personalInfo: {
+          fullName: lines[0] || resume.title || 'Resume',
+        },
+        summary: fallbackText,
+        experience: [],
+        education: [],
+        skills: [],
+      };
+    };
+
+    if (structuredFromField) {
+      structuredContent = structuredFromField;
+    } else if (typeof resume.content === 'string') {
       const parsedContent = safeJsonParse<Record<string, any> | null>(resume.content, null);
       if (parsedContent) {
         structuredContent = parsedContent;
+      } else if (fallbackText) {
+        structuredContent = buildFallbackStructuredContent();
       } else {
         structuredContent = {
           personalInfo: { fullName: 'Your Name' },
@@ -43,6 +64,8 @@ export class ResumeExportService {
       }
     } else if (resume.content && typeof resume.content === 'object') {
       structuredContent = resume.content;
+    } else if (fallbackText) {
+      structuredContent = buildFallbackStructuredContent();
     } else {
       structuredContent = {
         personalInfo: {},

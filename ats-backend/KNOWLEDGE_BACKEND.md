@@ -52,7 +52,7 @@ Features:
 
 - list/create/get/update/delete resumes
 - parse resume text endpoint
-- export endpoints (`/export/pdf`, `/export/word`)
+- export endpoints (`/export/pdf`, `/export/word`), including PDF fallback generation used by the rendered analysis overlay viewer when no original PDF exists
 - file retrieval and metadata endpoints
 - resume-specific analyze endpoint
 
@@ -263,7 +263,7 @@ Migrations:
 - `src/utils/pagination.ts`: query parsing, metadata, where-clause helpers
 - `src/utils/rate-limiter.ts`: quota checks and time-window accounting
 - `src/utils/resume-text-extractor.ts`: structured->plain conversion routines
-- `src/utils/resume-review-overlay.ts`: maps AI inline suggestions to resume character and line anchors
+- `src/utils/resume-review-overlay.ts`: maps AI inline suggestions to resume character anchors, line anchors, document blocks/sections, and richer overlay metadata for downstream viewers
 
 ### Shared types: `src/types/index.ts`
 

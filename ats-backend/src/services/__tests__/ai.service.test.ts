@@ -278,6 +278,34 @@ describe('AIService', () => {
       expect(result).toHaveProperty('actionableAdvice');
     });
 
+    it('should attach document metadata to the resume review overlay', async () => {
+      const resume = MockDataFactory.generateResumeText();
+      const jobDescription = MockDataFactory.generateJobDescription();
+      const analysisResult = MockDataFactory.generateAnalysisResult({
+        inlineSuggestions: [
+          {
+            referenceText: '- Improved performance by 40%',
+            suggestion: 'Add the user or system scale impacted by this 40% performance win.',
+            rationale: 'Quantified wins are stronger when paired with business scope.',
+            category: 'impact',
+            severity: 'high',
+          },
+        ],
+      });
+
+      mockChatCompletionsCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: JSON.stringify(analysisResult) } }],
+      });
+
+      const result = await aiService.analyzeResume(resume, jobDescription, 'openrouter/free');
+
+      expect(result.resumeReviewOverlay?.document?.blocks.length).toBeGreaterThan(0);
+      const anchoredSuggestion = result.resumeReviewOverlay?.suggestions.find((item) => item.anchorMethod === 'exact');
+      expect(anchoredSuggestion).toBeDefined();
+      expect(anchoredSuggestion?.anchorSnippet).toContain('Improved performance by 40%');
+      expect(anchoredSuggestion?.anchorBlockIds?.length).toBeGreaterThan(0);
+    });
+
     it('should use default model when not specified', async () => {
       const resume = MockDataFactory.generateResumeText();
       const jobDescription = MockDataFactory.generateJobDescription();

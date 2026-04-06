@@ -1,6 +1,10 @@
 import type {
   InlineResumeSuggestionInput,
+  ResumeReviewAnchorMethod,
   ResumeReviewCategory,
+  ResumeReviewDocument,
+  ResumeReviewDocumentBlock,
+  ResumeReviewDocumentBlockKind,
   ResumeReviewOverlay,
   ResumeReviewOverlaySuggestion,
   ResumeReviewSeverity,
@@ -8,13 +12,228 @@ import type {
 
 const MAX_OVERLAY_SUGGESTIONS = 18;
 const MIN_REFERENCE_LENGTH = 4;
+const SECTION_TITLE_PATTERN = /^[A-Z][A-Z\s/&,-]{1,60}$/;
+const TITLE_CASE_SECTION_PATTERN = /^(Summary|Professional Summary|Profile|Objective|Experience|Work Experience|Projects|Education|Skills|Technical Skills|Core Competencies|Certifications|Achievements|Leadership|Awards)$/i;
+const BULLET_PATTERN = /^[-*•]/;
+const CONTACT_PATTERN = /@|\+?\d[\d\s().-]{6,}|linkedin|github|portfolio|website|https?:\/\//i;
 
 const CATEGORY_ANCHORS: Record<ResumeReviewCategory, RegExp[]> = {
-  skills: [/\bskills\b/i, /\btechnical skills\b/i, /\bcore competencies\b/i],
-  experience: [/\bexperience\b/i, /\bwork experience\b/i, /\bprojects\b/i],
-  format: [/\bsummary\b/i, /\bexperience\b/i, /\beducation\b/i, /\bskills\b/i],
-  content: [/\bsummary\b/i, /\bprofile\b/i, /\bobjective\b/i],
-  impact: [/\bachievements\b/i, /\bprojects\b/i, /\bexperience\b/i],
+  skills: [/\bskills\b/i, /\btechnical skills\b/i, /\bcore competencies\b/i, /\btooling\b/i],
+  experience: [/\bexperience\b/i, /\bwork experience\b/i, /\bprojects\b/i, /\bemployment\b/i],
+  format: [/\bsummary\b/i, /\bexperience\b/i, /\beducation\b/i, /\bskills\b/i, /\bprojects\b/i],
+  content: [/\bsummary\b/i, /\bprofile\b/i, /\bobjective\b/i, /\babout\b/i],
+  impact: [/\bachievements\b/i, /\bprojects\b/i, /\bexperience\b/i, /\baccomplishments\b/i],
+};
+
+type ResumeLine = {
+  raw: string;
+  trimmed: string;
+  start: number;
+  end: number;
+  lineNumber: number;
+};
+
+const normalizeSectionId = (value: string) => {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return normalized || 'section';
+};
+
+const parseResumeLines = (resumeText: string): ResumeLine[] => {
+  const lines = resumeText.split('\n');
+  const parsed: ResumeLine[] = [];
+  let cursor = 0;
+
+  lines.forEach((raw, index) => {
+    parsed.push({
+      raw,
+      trimmed: raw.trim(),
+      start: cursor,
+      end: cursor + raw.length,
+      lineNumber: index + 1,
+    });
+    cursor += raw.length + 1;
+  });
+
+  return parsed;
+};
+
+const isLikelyNameLine = (line: ResumeLine) => {
+  if (line.lineNumber > 2 || !line.trimmed || line.trimmed.length > 40 || CONTACT_PATTERN.test(line.trimmed)) {
+    return false;
+  }
+
+  return /^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3}$/.test(line.trimmed);
+};
+
+const isLikelySectionHeading = (line: ResumeLine) => {
+  if (!line.trimmed || line.trimmed.length > 60 || isLikelyNameLine(line)) {
+    return false;
+  }
+
+  if (TITLE_CASE_SECTION_PATTERN.test(line.trimmed)) {
+    return true;
+  }
+
+  return line.lineNumber > 2 && SECTION_TITLE_PATTERN.test(line.trimmed) && line.trimmed.split(/\s+/).length <= 5;
+};
+
+const createBlock = (params: {
+  id: string;
+  kind: ResumeReviewDocumentBlockKind;
+  text: string;
+  start: number;
+  end: number;
+  lineStart: number;
+  lineEnd: number;
+  sectionTitle: string | null;
+}): ResumeReviewDocumentBlock => ({
+  id: params.id,
+  kind: params.kind,
+  text: params.text,
+  start: params.start,
+  end: params.end,
+  lineStart: params.lineStart,
+  lineEnd: params.lineEnd,
+  sectionTitle: params.sectionTitle,
+});
+
+const buildResumeReviewDocument = (resumeText: string): ResumeReviewDocument => {
+  const lines = parseResumeLines(resumeText);
+  const blocks: ResumeReviewDocumentBlock[] = [];
+  const sections: ResumeReviewDocument['sections'] = [];
+  let blockCounter = 0;
+  let sectionCounter = 0;
+  let currentSection: ResumeReviewDocument['sections'][number] | null = null;
+  let paragraphLines: ResumeLine[] = [];
+
+  const commitBlock = (params: {
+    kind: ResumeReviewDocumentBlockKind;
+    text: string;
+    start: number;
+    end: number;
+    lineStart: number;
+    lineEnd: number;
+  }) => {
+    if (!params.text.trim()) {
+      return;
+    }
+
+    const block = createBlock({
+      id: `resume-block-${++blockCounter}`,
+      kind: params.kind,
+      text: params.text,
+      start: params.start,
+      end: params.end,
+      lineStart: params.lineStart,
+      lineEnd: params.lineEnd,
+      sectionTitle: currentSection?.title || null,
+    });
+
+    blocks.push(block);
+
+    if (currentSection) {
+      currentSection.blockIds.push(block.id);
+      currentSection.end = block.end;
+      currentSection.lineEnd = block.lineEnd;
+    }
+  };
+
+  const flushParagraph = () => {
+    if (paragraphLines.length === 0) {
+      return;
+    }
+
+    const firstLine = paragraphLines[0];
+    const lastLine = paragraphLines[paragraphLines.length - 1];
+    const text = paragraphLines.map((line) => line.raw).join('\n');
+    commitBlock({
+      kind: 'paragraph',
+      text,
+      start: firstLine.start,
+      end: lastLine.end,
+      lineStart: firstLine.lineNumber,
+      lineEnd: lastLine.lineNumber,
+    });
+    paragraphLines = [];
+  };
+
+  lines.forEach((line) => {
+    if (!line.trimmed) {
+      flushParagraph();
+      return;
+    }
+
+    if (isLikelySectionHeading(line)) {
+      flushParagraph();
+      currentSection = {
+        id: `resume-section-${normalizeSectionId(line.trimmed)}-${++sectionCounter}`,
+        title: line.trimmed,
+        start: line.start,
+        end: line.end,
+        lineStart: line.lineNumber,
+        lineEnd: line.lineNumber,
+        blockIds: [],
+      };
+      sections.push(currentSection);
+      commitBlock({
+        kind: 'heading',
+        text: line.raw,
+        start: line.start,
+        end: line.end,
+        lineStart: line.lineNumber,
+        lineEnd: line.lineNumber,
+      });
+      return;
+    }
+
+    if (isLikelyNameLine(line)) {
+      flushParagraph();
+      commitBlock({
+        kind: 'name',
+        text: line.raw,
+        start: line.start,
+        end: line.end,
+        lineStart: line.lineNumber,
+        lineEnd: line.lineNumber,
+      });
+      return;
+    }
+
+    if (CONTACT_PATTERN.test(line.trimmed)) {
+      flushParagraph();
+      commitBlock({
+        kind: 'contact',
+        text: line.raw,
+        start: line.start,
+        end: line.end,
+        lineStart: line.lineNumber,
+        lineEnd: line.lineNumber,
+      });
+      return;
+    }
+
+    if (BULLET_PATTERN.test(line.trimmed)) {
+      flushParagraph();
+      commitBlock({
+        kind: 'bullet',
+        text: line.raw,
+        start: line.start,
+        end: line.end,
+        lineStart: line.lineNumber,
+        lineEnd: line.lineNumber,
+      });
+      return;
+    }
+
+    paragraphLines.push(line);
+  });
+
+  flushParagraph();
+
+  return {
+    blocks,
+    sections,
+  };
 };
 
 const normalizeCategory = (value: string | undefined): ResumeReviewCategory => {
@@ -75,17 +294,54 @@ const lineFromOffset = (lineStarts: number[], offset: number): number => {
 };
 
 const findSectionAnchor = (
-  resumeText: string,
+  document: ResumeReviewDocument,
   category: ResumeReviewCategory
-): { start: number; end: number } | null => {
+): { start: number; end: number; sectionTitle: string | null; blockIds: string[] } | null => {
   const patterns = CATEGORY_ANCHORS[category] || [];
-  for (const pattern of patterns) {
-    const match = pattern.exec(resumeText);
-    if (match && typeof match.index === 'number') {
+  for (const section of document.sections) {
+    const matches = patterns.some((pattern) => pattern.test(section.title));
+    if (!matches) {
+      continue;
+    }
+
+    const contentBlock = document.blocks.find((block) => section.blockIds.includes(block.id) && block.kind !== 'heading');
+    const anchorBlock = contentBlock || document.blocks.find((block) => section.blockIds.includes(block.id));
+
+    if (anchorBlock) {
       return {
-        start: match.index,
-        end: match.index + match[0].length,
+        start: anchorBlock.start,
+        end: anchorBlock.end,
+        sectionTitle: section.title,
+        blockIds: [anchorBlock.id],
       };
+    }
+
+    return {
+      start: section.start,
+      end: section.end,
+      sectionTitle: section.title,
+      blockIds: [],
+    };
+  }
+
+  return null;
+};
+
+const findBlockIdsForRange = (
+  blocks: ResumeReviewDocumentBlock[],
+  range: { start: number; end: number }
+) => blocks
+  .filter((block) => range.start < block.end && range.end > block.start)
+  .map((block) => block.id);
+
+const findSectionTitleForBlocks = (
+  blocks: ResumeReviewDocumentBlock[],
+  blockIds: string[]
+) => {
+  for (const blockId of blockIds) {
+    const block = blocks.find((item) => item.id === blockId);
+    if (block?.sectionTitle) {
+      return block.sectionTitle;
     }
   }
 
@@ -186,6 +442,10 @@ const buildAnchoredSuggestion = (params: {
   severity: ResumeReviewSeverity;
   range: { start: number; end: number };
   lineStarts: number[];
+  anchorMethod: ResumeReviewAnchorMethod;
+  anchorSection: string | null;
+  anchorBlockIds: string[];
+  anchorSnippet: string;
 }): ResumeReviewOverlaySuggestion => ({
   id: params.suggestionId,
   category: params.category,
@@ -198,6 +458,10 @@ const buildAnchoredSuggestion = (params: {
   end: params.range.end,
   lineStart: lineFromOffset(params.lineStarts, params.range.start),
   lineEnd: lineFromOffset(params.lineStarts, Math.max(params.range.start, params.range.end - 1)),
+  anchorMethod: params.anchorMethod,
+  anchorSection: params.anchorSection,
+  anchorBlockIds: params.anchorBlockIds,
+  anchorSnippet: params.anchorSnippet,
 });
 
 const buildUnmappedSuggestion = (params: {
@@ -207,6 +471,7 @@ const buildUnmappedSuggestion = (params: {
   referenceText?: string;
   category: ResumeReviewCategory;
   severity: ResumeReviewSeverity;
+  anchorSection?: string | null;
 }): ResumeReviewOverlaySuggestion => ({
   id: params.suggestionId,
   category: params.category,
@@ -219,6 +484,10 @@ const buildUnmappedSuggestion = (params: {
   end: null,
   lineStart: null,
   lineEnd: null,
+  anchorMethod: 'unmapped',
+  anchorSection: params.anchorSection ?? null,
+  anchorBlockIds: [],
+  anchorSnippet: params.referenceText,
 });
 
 export const buildResumeReviewOverlay = (params: {
@@ -233,6 +502,10 @@ export const buildResumeReviewOverlay = (params: {
   if (!normalizedResumeText) {
     return {
       resumeText: '',
+      document: {
+        blocks: [],
+        sections: [],
+      },
       suggestions: [],
       summary: {
         anchored: 0,
@@ -242,6 +515,7 @@ export const buildResumeReviewOverlay = (params: {
   }
 
   const lineStarts = buildLineStarts(normalizedResumeText);
+  const document = buildResumeReviewDocument(normalizedResumeText);
   const usedRanges: Array<{ start: number; end: number }> = [];
   const resumeTextLower = normalizedResumeText.toLowerCase();
   const mappedSuggestions: ResumeReviewOverlaySuggestion[] = [];
@@ -279,6 +553,7 @@ export const buildResumeReviewOverlay = (params: {
       : null;
 
     if (directRange) {
+      const anchorBlockIds = findBlockIdsForRange(document.blocks, directRange);
       usedRanges.push(directRange);
       mappedSuggestions.push(buildAnchoredSuggestion({
         suggestionId,
@@ -289,13 +564,18 @@ export const buildResumeReviewOverlay = (params: {
         severity,
         range: directRange,
         lineStarts,
+        anchorMethod: 'exact',
+        anchorSection: findSectionTitleForBlocks(document.blocks, anchorBlockIds),
+        anchorBlockIds,
+        anchorSnippet: normalizedResumeText.slice(directRange.start, directRange.end),
       }));
       continue;
     }
 
-    const sectionRange = findSectionAnchor(normalizedResumeText, category);
+    const sectionRange = findSectionAnchor(document, category);
     if (sectionRange) {
-      usedRanges.push(sectionRange);
+      const anchoredRange = { start: sectionRange.start, end: sectionRange.end };
+      usedRanges.push(anchoredRange);
       mappedSuggestions.push(buildAnchoredSuggestion({
         suggestionId,
         suggestion,
@@ -303,8 +583,12 @@ export const buildResumeReviewOverlay = (params: {
         referenceText: referenceText || undefined,
         category,
         severity,
-        range: sectionRange,
+        range: anchoredRange,
         lineStarts,
+        anchorMethod: 'section',
+        anchorSection: sectionRange.sectionTitle,
+        anchorBlockIds: sectionRange.blockIds,
+        anchorSnippet: normalizedResumeText.slice(sectionRange.start, sectionRange.end),
       }));
       continue;
     }
@@ -316,6 +600,7 @@ export const buildResumeReviewOverlay = (params: {
       referenceText: referenceText || undefined,
       category,
       severity,
+      anchorSection: null,
     }));
   }
 
@@ -323,6 +608,7 @@ export const buildResumeReviewOverlay = (params: {
 
   return {
     resumeText: normalizedResumeText,
+    document,
     suggestions: mappedSuggestions,
     summary: {
       anchored,

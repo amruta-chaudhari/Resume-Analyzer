@@ -73,6 +73,7 @@ Redirect behavior:
 - Displays full analysis output
 - handles loading/error/result state transitions
 - renders an inline resume improvement map at the bottom via `ResumeImprovementOverlay`
+- renders a real page overlay viewer via `ResumeReviewCanvas` + `ResumePdfOverlayPreview`, using hoverable markers on rendered resume pages when a PDF source is available
 
 ### `src/pages/ResumeManagementPage.jsx`
 
@@ -120,6 +121,9 @@ Analysis visualization:
 - `ExperienceRelevance.jsx`
 - `ActionableAdvice.jsx`
 - `ResumeImprovementOverlay.jsx`
+- `ResumeReviewCanvas.jsx`
+- `ResumePdfOverlayPreview.jsx`
+- `resumePdfOverlay.js`
 
 Input/workflow:
 
@@ -226,6 +230,7 @@ Special handling:
 
 - analysis queue responses include job IDs and state polling details
 - export endpoints return blobs/binary payloads
+- rendered resume overlay preview fetches either the original PDF (`/api/resumes/:id/file`) or a generated PDF preview (`/api/resumes/:id/export/pdf`) and resolves marker positions client-side with `pdfjs-dist`
 - paginated endpoints include list + pagination metadata
 
 ## 8) State Management and Persistence

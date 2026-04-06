@@ -96,25 +96,44 @@ describe('Analysis route integration', () => {
       completedAt: '2026-04-05T10:00:05.000Z',
       processingTimeMs: 5000,
       tokensUsed: 1200,
-      results: JSON.stringify({
-        overallScore: 83,
-        resumeReviewOverlay: {
-          resumeText: 'Jane Doe\nSkills\nReact',
-          suggestions: [
-            {
-              id: 'overlay-suggestion-1',
-              category: 'skills',
-              severity: 'high',
-              suggestion: 'Add GraphQL to your skills section.',
-              status: 'anchored',
-              start: 9,
-              end: 15,
-              lineStart: 2,
-              lineEnd: 2,
+        results: JSON.stringify({
+          overallScore: 83,
+          resumeReviewOverlay: {
+            resumeText: 'Jane Doe\nSkills\nReact',
+            document: {
+              blocks: [
+                {
+                  id: 'resume-block-1',
+                  kind: 'name',
+                  text: 'Jane Doe',
+                  start: 0,
+                  end: 8,
+                  lineStart: 1,
+                  lineEnd: 1,
+                  sectionTitle: null,
+                },
+              ],
+              sections: [],
             },
-          ],
-          summary: {
-            anchored: 1,
+            suggestions: [
+              {
+                id: 'overlay-suggestion-1',
+                category: 'skills',
+                severity: 'high',
+                suggestion: 'Add GraphQL to your skills section.',
+                status: 'anchored',
+                start: 9,
+                end: 15,
+                lineStart: 2,
+                lineEnd: 2,
+                anchorMethod: 'section',
+                anchorSection: 'Skills',
+                anchorBlockIds: ['resume-block-1'],
+                anchorSnippet: 'Skills',
+              },
+            ],
+            summary: {
+              anchored: 1,
             unmapped: 0,
           },
         },
@@ -149,5 +168,7 @@ describe('Analysis route integration', () => {
       unmapped: 0,
     });
     expect(response.body.data.resumeReviewOverlay.suggestions[0].category).toBe('skills');
+    expect(response.body.data.resumeReviewOverlay.document.blocks[0].kind).toBe('name');
+    expect(response.body.data.resumeReviewOverlay.suggestions[0].anchorMethod).toBe('section');
   });
 });

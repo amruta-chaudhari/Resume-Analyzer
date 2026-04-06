@@ -5,6 +5,7 @@ import ExperienceRelevance from './ExperienceRelevance';
 import FormattingScore from './FormattingScore';
 import ActionableAdvice from './ActionableAdvice';
 import ResumeImprovementOverlay from './ResumeImprovementOverlay';
+import ResumeReviewCanvas from './ResumeReviewCanvas';
 import EmptyState from './EmptyState';
 import { downloadResumeFile } from '../services/api';
 
@@ -167,6 +168,9 @@ const AnalysisResults = ({ results }) => {
 
       {/* Row 4: Inline resume review overlay */}
       <ResumeImprovementOverlay results={results} />
+
+      {/* Row 5: Document-style review canvas */}
+      <ResumeReviewCanvas results={results} />
     </div>
   );
 };

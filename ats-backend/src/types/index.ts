@@ -153,6 +153,36 @@ export type ResumeReviewCategory = 'skills' | 'experience' | 'format' | 'content
 
 export type ResumeReviewSeverity = 'high' | 'medium' | 'low';
 
+export type ResumeReviewAnchorMethod = 'exact' | 'section' | 'unmapped';
+
+export type ResumeReviewDocumentBlockKind = 'name' | 'contact' | 'heading' | 'paragraph' | 'bullet';
+
+export interface ResumeReviewDocumentBlock {
+  id: string;
+  kind: ResumeReviewDocumentBlockKind;
+  text: string;
+  start: number;
+  end: number;
+  lineStart: number;
+  lineEnd: number;
+  sectionTitle: string | null;
+}
+
+export interface ResumeReviewDocumentSection {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  lineStart: number;
+  lineEnd: number;
+  blockIds: string[];
+}
+
+export interface ResumeReviewDocument {
+  blocks: ResumeReviewDocumentBlock[];
+  sections: ResumeReviewDocumentSection[];
+}
+
 export interface ResumeReviewOverlaySuggestion {
   id: string;
   category: ResumeReviewCategory;
@@ -165,11 +195,16 @@ export interface ResumeReviewOverlaySuggestion {
   end: number | null;
   lineStart: number | null;
   lineEnd: number | null;
+  anchorMethod?: ResumeReviewAnchorMethod;
+  anchorSection?: string | null;
+  anchorBlockIds?: string[];
+  anchorSnippet?: string;
 }
 
 export interface ResumeReviewOverlay {
   resumeText: string;
   suggestions: ResumeReviewOverlaySuggestion[];
+  document?: ResumeReviewDocument;
   summary: {
     anchored: number;
     unmapped: number;
