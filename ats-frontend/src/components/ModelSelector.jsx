@@ -67,7 +67,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
   return (
     <div className="glass-strong rounded-3xl p-6 hover-glass transition-all duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center">
           <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-2 rounded-xl mr-3">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,11 +81,11 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
           </span>
         </h3>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center flex-wrap gap-2">
           {/* Advanced filters toggle */}
           <button
             onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className={`glass p-2 rounded-full transition-colors duration-200 ${
+            className={`glass p-2 min-h-11 min-w-11 rounded-full transition-colors duration-200 ${
               showAdvancedFilters ? 'bg-blue-100/20 dark:bg-blue-900/20' : 'hover:bg-blue-100/20 dark:hover:bg-blue-900/20'
             }`}
             title="Advanced filters"
@@ -99,7 +99,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
           <button
             onClick={handleRefreshModels}
             disabled={loading}
-            className="glass p-2 rounded-full hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200 disabled:opacity-50"
+            className="glass p-2 min-h-11 min-w-11 rounded-full hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200 disabled:opacity-50"
             title="Refresh models"
           >
             <svg 
@@ -113,7 +113,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
           {/* Expand/Collapse button */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="glass px-3 py-1 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200"
+            className="glass px-3 py-2 min-h-11 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:bg-blue-100/20 dark:hover:bg-blue-900/20 transition-colors duration-200"
             aria-expanded={isExpanded}
             aria-controls="model-selector-list"
           >
@@ -172,7 +172,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
               <p className="text-xs text-cyan-700 dark:text-cyan-300 mb-2 font-medium">
                 Visual ATS analysis enabled: this model accepts both text and image input.
               </p>
-              <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                 <span>Provider: {currentModel.provider}</span>
                 {currentModel.context_length && (
                   <span>Context: {(currentModel.context_length / 1000).toFixed(0)}K tokens</span>
@@ -272,7 +272,7 @@ const ModelSelector = ({ onModelSelect, selectedModel, disabled = false }) => {
                           </button>
                         )}
                       </div>
-                      <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                         <span>{model.provider}</span>
                         {model.context_length && (
                           <span>{(model.context_length / 1000).toFixed(0)}K tokens</span>

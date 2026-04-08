@@ -90,9 +90,13 @@ This document provides a comprehensive guide for AI assistants (like Claude) wor
 │   │   ├── AnalysisDashboard.jsx # ATS analysis tab
 │   │   ├── AnalysisPage.jsx   # Analysis results view
 │   │   ├── ResumeManagementPage.jsx
+│   │   ├── JobDescriptionsPage.jsx
 │   │   ├── HistoryPage.jsx
 │   │   ├── Login.jsx
-│   │   └── SignUp.jsx
+│   │   ├── SignUp.jsx
+│   │   ├── PrivacyPage.jsx
+│   │   ├── TermsPage.jsx
+│   │   └── NotFoundPage.jsx
 │   ├── services/
 │   │   ├── api.js             # Axios instance + API functions
 │   │   └── authService.js     # Auth-specific API calls
@@ -230,7 +234,7 @@ npm run presentation:build # Generate presentation assets from tour output
 3. Frontend polls `GET /api/analysis/:jobId/status` until the job completes
 4. Backend worker extracts text from resume file and runs `AIService.analyzeResume()`
 5. Response is parsed as JSON, merged with deterministic scoring, and saved to database
-6. Frontend loads `GET /api/analyses/:id` and renders scorecards plus inline resume improvement overlays
+6. Frontend loads `GET /api/analyses/:id` and renders scorecards plus inline resume improvement overlays and review canvas modes
 
 ### Model Parameters (Advanced Settings)
 - **Temperature** (0.0-2.0): Controls response creativity

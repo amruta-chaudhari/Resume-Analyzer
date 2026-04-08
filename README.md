@@ -34,6 +34,7 @@ A full-stack AI-powered resume analysis platform that helps job seekers optimize
 - **Dark/Light Theme** - Persistent theme preference
 - **Mobile-Friendly** - Works great on all devices
 - **Real-time Feedback** - Instant analysis results with deterministic formatting diagnostics and visual-preview aware review when a PDF is available
+- **Recovery and Legal Paths** - Dedicated 404 page plus Privacy and Terms routes
 
 ---
 
@@ -324,6 +325,35 @@ Receive detailed feedback including:
 
 ### 5. Iterate and Improve
 Use the actionable advice to update your resume and re-analyze until you achieve your target score.
+
+---
+
+## 🗺 Frontend Navigation
+
+Public routes:
+- `/login`
+- `/signup`
+- `/privacy`
+- `/terms`
+- `/404`
+
+Protected dashboard routes:
+- `/dashboard/analysis`
+- `/dashboard/analysis/:id`
+- `/dashboard/resumes`
+- `/dashboard/job-descriptions`
+- `/dashboard/history`
+
+Admin routes:
+- `/admin/users`
+- `/admin/users/:userId`
+- `/admin/system`
+- `/admin/analytics`
+- `/admin/analytics/events`
+
+Route behavior notes:
+- Legacy aliases `/analysis`, `/analysis/:id`, `/resumes`, and `/history` redirect into dashboard routes.
+- Unknown routes render a dedicated not-found page with recovery links.
 
 ---
 

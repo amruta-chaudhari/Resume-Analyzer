@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { getAnalyses } from '../services/api';
 import LoadingSpinner from './LoadingSpinner';
@@ -8,14 +9,19 @@ import { formatDateTime } from '../utils/dateFormat';
 const AnalysisHistory = () => {
   const navigate = useNavigate();
   const [analyses, setAnalyses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const loadAnalyses = async (pageNum = 1) => {
+  const loadAnalyses = async (pageNum = 1, preserveResults = false) => {
     try {
-      setLoading(true);
+      if (preserveResults) {
+        setIsRefreshing(true);
+      } else {
+        setInitialLoading(true);
+      }
       setError('');
       const response = await getAnalyses(pageNum, 10);
       setAnalyses(response.analyses || []);
@@ -25,7 +31,8 @@ const AnalysisHistory = () => {
       setError(err.message || 'Failed to load analysis history');
       console.error('Error loading analyses:', err);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -37,7 +44,7 @@ const AnalysisHistory = () => {
     navigate(`/dashboard/analysis/${analysisId}`);
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex justify-center items-center py-12">
         <LoadingSpinner label="Loading analyses..." />
@@ -45,8 +52,19 @@ const AnalysisHistory = () => {
     );
   }
 
-  if (error) {
-    return <ErrorMessage message={error} />;
+  if (error && analyses.length === 0) {
+    return (
+      <div>
+        <ErrorMessage message={error} />
+        <button
+          type="button"
+          onClick={() => loadAnalyses(1)}
+          className="px-4 py-2 glass rounded-xl hover:bg-white/10 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -54,9 +72,11 @@ const AnalysisHistory = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Analysis History</h2>
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {analyses.length} analyses
+          {analyses.length} analyses {isRefreshing && <span className="ml-2">Updating...</span>}
         </div>
       </div>
+
+      {error && analyses.length > 0 && <ErrorMessage message={error} />}
 
       {analyses.length === 0 ? (
         <div className="text-center py-12">
@@ -71,6 +91,12 @@ const AnalysisHistory = () => {
           <p className="text-gray-500 dark:text-gray-400">
             Run your first resume analysis to see results here.
           </p>
+          <Link
+            to="/dashboard/analysis"
+            className="inline-block mt-4 px-4 py-2 btn-glass text-white rounded-xl font-semibold"
+          >
+            Start analysis
+          </Link>
         </div>
       ) : (
         <div className="space-y-4">
@@ -99,10 +125,11 @@ const AnalysisHistory = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600 dark:text-gray-400">
                     <div>
-                      <span className="font-medium">Resume:</span> {analysis.resume?.title || 'N/A'}
+                      <span className="font-medium">Resume:</span> {analysis.resumeTitle || analysis.resume?.title || 'N/A'}
                     </div>
                     <div>
-                      <span className="font-medium">Date:</span> {formatDateTime(analysis.createdAt)}
+                      <span className="font-medium">Date:</span>{' '}
+                      <time dateTime={analysis.createdAt}>{formatDateTime(analysis.createdAt)}</time>
                     </div>
                     <div>
                       <span className="font-medium">Model:</span> {analysis.modelUsed || 'N/A'}
@@ -124,9 +151,9 @@ const AnalysisHistory = () => {
       {totalPages > 1 && (
         <div className="flex justify-center space-x-2 mt-8">
           <button
-            onClick={() => loadAnalyses(page - 1)}
+            onClick={() => loadAnalyses(page - 1, true)}
             disabled={page === 1}
-            className="px-4 py-2 glass rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 transition-all duration-300"
+            className="px-4 py-2 min-h-11 glass rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 transition-all duration-300"
           >
             Previous
           </button>
@@ -134,9 +161,9 @@ const AnalysisHistory = () => {
             Page {page} of {totalPages}
           </span>
           <button
-            onClick={() => loadAnalyses(page + 1)}
+            onClick={() => loadAnalyses(page + 1, true)}
             disabled={page === totalPages}
-            className="px-4 py-2 glass rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 transition-all duration-300"
+            className="px-4 py-2 min-h-11 glass rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10 transition-all duration-300"
           >
             Next
           </button>

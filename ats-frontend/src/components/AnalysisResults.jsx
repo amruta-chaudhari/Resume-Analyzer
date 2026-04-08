@@ -11,6 +11,7 @@ import { downloadResumeFile } from '../services/api';
 
 const AnalysisResults = ({ results }) => {
   const [downloadStatus, setDownloadStatus] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   if (!results) {
     return <EmptyState />;
@@ -18,6 +19,8 @@ const AnalysisResults = ({ results }) => {
 
   const handleDownloadResume = async () => {
     try {
+      setDownloading(true);
+      setDownloadStatus('Preparing resume download...');
       if (results.resume && results.resume.id) {
         await downloadResumeFile(results.resume.id, results.resume.title || `resume-${results.resume.id}`);
         setDownloadStatus('Resume download started.');
@@ -25,6 +28,8 @@ const AnalysisResults = ({ results }) => {
     } catch (error) {
       console.error('Failed to download resume:', error);
       setDownloadStatus('Failed to download the original resume file.');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -37,6 +42,9 @@ const AnalysisResults = ({ results }) => {
   const scoreInfo = getScoreText(results.overallScore);
   const scoreBreakdown = results.scoringBreakdown;
   const modelUsed = typeof results.modelUsed === 'object' ? results.modelUsed : null;
+  const modelName = modelUsed?.name || (typeof results.modelUsed === 'string' ? results.modelUsed : 'Analysis model unavailable');
+  const modelProvider = modelUsed?.provider || results.aiProvider || 'Unknown provider';
+  const scoringWeights = scoreBreakdown?.weights || {};
 
   return (
     <div className="space-y-8">
@@ -44,8 +52,8 @@ const AnalysisResults = ({ results }) => {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Model</p>
-            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{modelUsed?.name || 'Analysis model unavailable'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{modelUsed?.provider || results.aiProvider || 'Unknown provider'}</p>
+            <p className="mt-2 text-sm font-semibold text-gray-800 dark:text-white">{modelName}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{modelProvider}</p>
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Method</p>
@@ -76,7 +84,7 @@ const AnalysisResults = ({ results }) => {
         )}
 
         {downloadStatus && (
-          <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">{downloadStatus}</div>
+          <div className="mt-4 text-sm text-gray-600 dark:text-gray-300" role="status" aria-live="polite">{downloadStatus}</div>
         )}
       </div>
 
@@ -84,19 +92,20 @@ const AnalysisResults = ({ results }) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Overall Score */}
         <div className="glass-strong rounded-3xl p-8 hover-glass transition-all duration-300 slide-up">
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
             <h3 className="text-2xl font-bold text-gray-800 dark:text-white">
               Overall Match Score
             </h3>
             {results.resume && (
               <button
                 onClick={handleDownloadResume}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200"
+                disabled={downloading}
+                className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2 min-h-11 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span>Download Resume</span>
+                <span>{downloading ? 'Downloading...' : 'Download Resume'}</span>
               </button>
             )}
           </div>
@@ -143,9 +152,9 @@ const AnalysisResults = ({ results }) => {
             <div className="mt-6 rounded-2xl border border-white/20 bg-white/60 p-4 dark:bg-slate-900/50">
               <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Scoring Breakdown</h4>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3 text-sm text-gray-700 dark:text-gray-200">
-                <div>Keyword Score: <span className="font-semibold">{scoreBreakdown.skills}</span> ({Math.round((scoreBreakdown.weights.skills || 0) * 100)}%)</div>
-                <div>Experience Score: <span className="font-semibold">{scoreBreakdown.experience}</span> ({Math.round((scoreBreakdown.weights.experience || 0) * 100)}%)</div>
-                <div>Formatting Score: <span className="font-semibold">{scoreBreakdown.formatting}</span> ({Math.round((scoreBreakdown.weights.formatting || 0) * 100)}%)</div>
+                <div>Keyword Score: <span className="font-semibold">{scoreBreakdown.skills}</span> ({Math.round((scoringWeights.skills || 0) * 100)}%)</div>
+                <div>Experience Score: <span className="font-semibold">{scoreBreakdown.experience}</span> ({Math.round((scoringWeights.experience || 0) * 100)}%)</div>
+                <div>Formatting Score: <span className="font-semibold">{scoreBreakdown.formatting}</span> ({Math.round((scoringWeights.formatting || 0) * 100)}%)</div>
               </div>
               <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 Keyword coverage {Math.round((scoreBreakdown.keywordCoverage || 0) * 100)}% • Experience keyword coverage {Math.round((scoreBreakdown.experienceKeywordCoverage || 0) * 100)}%

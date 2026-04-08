@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import Dashboard from './pages/Dashboard';
+import NotFoundPage from './pages/NotFoundPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 import AdminPage from './pages/AdminPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
@@ -22,39 +25,45 @@ function App() {
     <AppErrorBoundary>
       <BrowserRouter>
         <div className="min-h-screen">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/analysis" element={<Navigate to="/dashboard/analysis" replace />} />
-            <Route path="/analysis/:id" element={<LegacyAnalysisRedirect />} />
-            <Route path="/resumes" element={<Navigate to="/dashboard/resumes" replace />} />
-            <Route path="/history" element={<Navigate to="/dashboard/history" replace />} />
-            <Route
-              path="/dashboard/*"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/*"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <AdminPage />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="users" replace />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="users/:userId" element={<AdminUserDetailPage />} />
-              <Route path="system" element={<AdminSystemPage />} />
-              <Route path="analytics" element={<AdminAnalyticsPage />} />
-              <Route path="analytics/events" element={<AdminUsageEventsPage />} />
-            </Route>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <a href="#main-content" className="skip-link">Skip to content</a>
+          <div id="main-content">
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/analysis" element={<Navigate to="/dashboard/analysis" replace />} />
+              <Route path="/analysis/:id" element={<LegacyAnalysisRedirect />} />
+              <Route path="/resumes" element={<Navigate to="/dashboard/resumes" replace />} />
+              <Route path="/history" element={<Navigate to="/dashboard/history" replace />} />
+              <Route
+                path="/dashboard/*"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/*"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminPage />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="users" replace />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="users/:userId" element={<AdminUserDetailPage />} />
+                <Route path="system" element={<AdminSystemPage />} />
+                <Route path="analytics" element={<AdminAnalyticsPage />} />
+                <Route path="analytics/events" element={<AdminUsageEventsPage />} />
+              </Route>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/404" element={<NotFoundPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </div>
         </div>
       </BrowserRouter>
     </AppErrorBoundary>

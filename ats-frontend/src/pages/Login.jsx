@@ -42,7 +42,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen animated-bg paper-texture flex items-center justify-center px-4">
+    <div className="min-h-dvh animated-bg paper-texture flex items-start sm:items-center justify-center px-4 py-8 overflow-y-auto">
       <div className="glass-strong rounded-3xl p-8 max-w-md w-full">
         <h1 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
           Welcome Back
@@ -108,6 +108,11 @@ const Login = () => {
             Sign up
           </Link>
         </p>
+        <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400 space-x-3">
+          <Link to="/privacy" className="hover:underline">Privacy</Link>
+          <span aria-hidden="true">•</span>
+          <Link to="/terms" className="hover:underline">Terms</Link>
+        </div>
       </div>
     </div>
   );

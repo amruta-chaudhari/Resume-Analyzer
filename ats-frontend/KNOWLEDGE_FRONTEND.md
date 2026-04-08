@@ -26,12 +26,16 @@ Route model:
 - Public:
   - `/login`
   - `/signup`
+  - `/privacy`
+  - `/terms`
+  - `/404`
 - Protected:
   - `/dashboard/*`
   - `/admin/*` (admin role required)
 - Redirect conventions:
-  - root and legacy paths redirect to dashboard analysis view
+  - root redirects to dashboard analysis view
   - `/analysis/:id` redirects to `/dashboard/analysis/:id`
+  - unknown routes resolve to `/404` and render a recovery page
 
 Nested dashboard routes:
 
@@ -83,7 +87,12 @@ Redirect behavior:
 
 ### `src/pages/HistoryPage.jsx`
 
-- combines analysis history with job description management
+- combines analysis history with usage summary
+
+### `src/pages/JobDescriptionsPage.jsx`
+
+- dedicated job description CRUD management
+- powers saved job selection for analysis flow
 
 ### Auth pages
 
@@ -102,6 +111,7 @@ Responsibilities:
 - `src/pages/admin/AdminAnalyticsPage.jsx`
 - `src/pages/admin/AdminUsageEventsPage.jsx`
 - `src/pages/admin/AdminUsersPage.jsx`
+- `src/pages/admin/AdminUserDetailPage.jsx`
 - `src/pages/admin/AdminSystemPage.jsx`
 
 Responsibilities:

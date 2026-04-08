@@ -43,6 +43,20 @@ const SettingsPanel = ({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) {
+      document.body.style.overflow = '';
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen || !panelRef.current) {
       return undefined;
     }
@@ -109,7 +123,7 @@ const SettingsPanel = ({
       <button
         ref={triggerButtonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 right-4 sm:top-12 sm:right-6 z-40 p-3 glass rounded-full transition-all duration-200 hover:scale-105 group"
+        className="fixed top-[calc(env(safe-area-inset-top)+1rem)] right-4 sm:top-12 sm:right-6 z-[60] p-3 glass rounded-full transition-all duration-200 hover:scale-105 group"
         aria-label="Open settings"
         aria-expanded={isOpen}
         aria-controls="settings-panel"
@@ -129,7 +143,7 @@ const SettingsPanel = ({
         <>
           {/* Backdrop */}
           <div 
-            className="fixed inset-0 bg-black/90  z-30 fade-in"
+            className="fixed inset-0 bg-black/90 z-[70] fade-in"
             onClick={() => setIsOpen(false)}
           />
           
@@ -137,7 +151,7 @@ const SettingsPanel = ({
           <div
             id="settings-panel"
             ref={panelRef}
-            className="fixed top-16 right-4 sm:top-12 sm:right-20 w-80 max-w-[calc(100vw-2rem)] z-40 slide-up"
+            className="fixed top-[calc(env(safe-area-inset-top)+4rem)] right-4 sm:top-12 sm:right-20 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto z-[80] slide-up"
             role="dialog"
             aria-modal="true"
             aria-labelledby="settings-panel-title"
@@ -157,7 +171,7 @@ const SettingsPanel = ({
                 <button
                   ref={closeButtonRef}
                   onClick={() => setIsOpen(false)}
-                  className="glass p-2 rounded-full hover:bg-red-100/20 dark:hover:bg-red-900/20 transition-colors duration-200"
+                  className="glass p-2 min-h-11 min-w-11 rounded-full hover:bg-red-100/20 dark:hover:bg-red-900/20 transition-colors duration-200"
                   aria-label="Close settings"
                 >
                   <svg className="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">

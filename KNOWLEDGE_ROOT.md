@@ -51,6 +51,12 @@ Request/interaction shape:
 7. Frontend renders score visualizations, recommendations, checklist-style formatting diagnostics, inline resume improvement overlays, and a rendered PDF/page overlay preview with hover markers.
 8. User can export resume as PDF/DOCX.
 
+Frontend routing notes:
+
+- Dashboard navigation is split into Analysis, Resume Library, Job Descriptions, and History and Usage.
+- Public legal/recovery routes are available at `/privacy`, `/terms`, and `/404`.
+- Unknown routes now resolve to a dedicated not-found page instead of silently redirecting.
+
 Core principles:
 
 - Service-layer architecture on backend.

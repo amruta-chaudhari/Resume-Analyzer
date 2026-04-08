@@ -9,6 +9,10 @@
   --primary-gradient-light: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
@@ -61,6 +65,10 @@ code {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
+.hover-glass {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+}
+
 .dark .hover-glass:hover {
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -97,6 +105,7 @@ code {
   border: 1px solid rgba(255, 255, 255, 0.3);
   position: relative;
   overflow: hidden;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   /* box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); */
 }
 
@@ -113,6 +122,45 @@ code {
 .dark .btn-glass:hover {
   transform: translateY(-2px);
   /* box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); */
+}
+
+.btn-glass:active,
+.hover-glass:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease both;
+}
+
+.slide-up {
+  animation: slideUp 0.45s ease both;
+}
+
+.keyword-badge {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .dropzone-active {
   background: rgba(102, 126, 234, 0.08);
@@ -229,6 +277,28 @@ textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid #4f46e5;
   outline-offset: 2px;
+}
+
+a:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -100%;
+  z-index: 120;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: #111827;
+  color: #ffffff;
+  font-weight: 600;
+  transition: top 0.2s ease;
+}
+
+.skip-link:focus-visible {
+  top: 1rem;
 }
 
 /* High contrast focus for better accessibility */

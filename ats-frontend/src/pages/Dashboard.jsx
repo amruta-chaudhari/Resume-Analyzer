@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Link, NavLink, useNavigate, Navigate } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 import { authService } from '../services/authService';
 import { testConnection } from '../services/api';
@@ -15,7 +15,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState('');
   const { clearAuth, updateUser, refreshToken, hasHydrated, user } = useAuthStore();
-  const location = useLocation();
+  const navigate = useNavigate();
   const hasAdminAccess =
     user?.role === 'ADMIN' ||
     user?.subscriptionTier === 'admin';
@@ -82,7 +82,7 @@ const Dashboard = () => {
 
         if (isAuthError) {
           clearAuth();
-          window.location.href = '/login';
+          navigate('/login', { replace: true });
           return;
         }
 
@@ -93,27 +93,28 @@ const Dashboard = () => {
     };
 
     loadUser();
-  }, [clearAuth, hasHydrated, updateUser]);
+  }, [clearAuth, hasHydrated, navigate, updateUser]);
 
   // Check backend connection
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const result = await testConnection();
-        setConnectionStatus(result.success ? 'connected' : 'error');
-      } catch (error) {
-        console.error('Connection check failed:', error);
-        setConnectionStatus('error');
-      }
-    };
-
-    checkConnection();
+  const checkConnection = useCallback(async () => {
+    try {
+      setConnectionStatus('checking');
+      const result = await testConnection();
+      setConnectionStatus(result.success ? 'connected' : 'error');
+    } catch (error) {
+      console.error('Connection check failed:', error);
+      setConnectionStatus('error');
+    }
   }, []);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
 
   const handleLogout = () => {
     authService.logout(refreshToken).catch(() => {});
     clearAuth();
-    window.location.href = '/login';
+    navigate('/login', { replace: true });
   };
 
   const handleToggleModelSelector = () => {
@@ -147,19 +148,19 @@ const Dashboard = () => {
       case 'checking':
         return {
           color: 'bg-yellow-400',
-          text: 'Connecting...',
+          text: 'Checking backend',
           icon: '⏳'
         };
       case 'connected':
         return {
           color: 'bg-green-400',
-          text: 'Connected',
+          text: 'Backend online',
           icon: '✅'
         };
       case 'error':
         return {
           color: 'bg-red-400',
-          text: 'Disconnected',
+          text: 'Backend offline',
           icon: '❌'
         };
       default:
@@ -234,11 +235,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  const isActive = (path) => {
-    const target = `/dashboard${path}`;
-    return location.pathname === target || location.pathname.startsWith(`${target}/`);
-  };
 
   return (
     <div className="min-h-screen animated-bg paper-texture relative overflow-hidden">
@@ -325,7 +321,7 @@ const Dashboard = () => {
             {connectionStatus === 'error' && (
               <div className="mt-4">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={checkConnection}
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200"
                 >
                   Retry Connection
@@ -338,74 +334,50 @@ const Dashboard = () => {
         {/* Desktop Navigation Tabs */}
         <div className="hidden sm:block mb-8">
           <div className="glass-strong rounded-2xl p-2 mx-auto max-w-5xl">
-            <div className="flex items-center gap-2 overflow-x-auto px-1">
+            <nav className="flex items-center gap-2 overflow-x-auto px-1" aria-label="Primary navigation">
               {navigationItems.map((item) => (
-                <Link
+                <NavLink
                   key={item.key}
                   to={item.to}
-                  className={`inline-flex items-center justify-center gap-2 px-4 lg:px-6 py-3 rounded-xl font-medium transition-all duration-300 whitespace-nowrap ${
-                    isActive(item.path)
+                  className={({ isActive }) => `inline-flex items-center justify-center gap-2 px-4 lg:px-6 py-3 rounded-xl font-medium transition-all duration-300 whitespace-nowrap ${
+                    isActive
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-white/10'
                   }`}
                 >
                   {item.icon}
                   <span>{item.desktopLabel}</span>
-                </Link>
+                </NavLink>
               ))}
-            </div>
+            </nav>
           </div>
         </div>
 
-        {/* Mobile Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-          <nav
-            className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
-            aria-label="Primary navigation"
-          >
-            <div className="flex justify-around items-center max-w-md mx-auto gap-1">
-              {navigationItems.map((item) => (
-                <Link
-                  key={item.key}
-                  to={item.to}
-                  className={`flex flex-col items-center justify-center px-2 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
-                    isActive(item.path)
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                  aria-label={item.desktopLabel}
-                >
-                  <span className="mb-1">{item.icon}</span>
-                  <span className="text-[11px] font-medium truncate">{item.mobileLabel}</span>
-                </Link>
-              ))}
-            </div>
-          </nav>
-        </div>
-
         {/* Main Content */}
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard/analysis" replace />} />
-          <Route
-            path="analysis"
-            element={
-              <AnalysisDashboard
-                showModelSelector={showModelSelector}
-                selectedModel={selectedModel}
-                modelParameters={modelParameters}
-                connectionStatus={connectionStatus}
-                setConnectionStatus={setConnectionStatus}
-                onModelSelect={setSelectedModel}
-                onModelParametersChange={handleModelParametersChange}
-              />
-            }
-          />
-          <Route path="analysis/:id" element={<AnalysisPage embedded />} />
-          <Route path="resumes" element={<ResumeManagementPage />} />
-          <Route path="job-descriptions" element={<JobDescriptionsPage />} />
-          <Route path="history" element={<HistoryPage />} />
-          <Route path="*" element={<Navigate to="/dashboard/analysis" replace />} />
-        </Routes>
+        <main id="dashboard-content" role="main">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard/analysis" replace />} />
+            <Route
+              path="analysis"
+              element={
+                <AnalysisDashboard
+                  showModelSelector={showModelSelector}
+                  selectedModel={selectedModel}
+                  modelParameters={modelParameters}
+                  connectionStatus={connectionStatus}
+                  setConnectionStatus={setConnectionStatus}
+                  onModelSelect={setSelectedModel}
+                  onModelParametersChange={handleModelParametersChange}
+                />
+              }
+            />
+            <Route path="analysis/:id" element={<AnalysisPage embedded />} />
+            <Route path="resumes" element={<ResumeManagementPage />} />
+            <Route path="job-descriptions" element={<JobDescriptionsPage />} />
+            <Route path="history" element={<HistoryPage />} />
+            <Route path="*" element={<Navigate to="/dashboard/analysis" replace />} />
+          </Routes>
+        </main>
 
         {/* Footer */}
         <div className="mt-16 text-center">
@@ -418,7 +390,38 @@ const Dashboard = () => {
                 Dynamic model selection with real-time updates
               </p>
             )}
+            <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+              <Link to="/privacy" className="text-gray-700 dark:text-gray-300 hover:underline">Privacy</Link>
+              <Link to="/terms" className="text-gray-700 dark:text-gray-300 hover:underline">Terms</Link>
+              <Link to="/404" className="text-gray-700 dark:text-gray-300 hover:underline">Help</Link>
+            </div>
           </div>
+        </div>
+
+        {/* Mobile Bottom Navigation */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
+          <nav
+            className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg border-t border-gray-200 dark:border-gray-700 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]"
+            aria-label="Primary navigation"
+          >
+            <div className="flex justify-around items-center max-w-md mx-auto gap-1">
+              {navigationItems.map((item) => (
+                <NavLink
+                  key={item.key}
+                  to={item.to}
+                  className={({ isActive }) => `flex flex-col items-center justify-center px-2 py-2 min-h-11 rounded-xl transition-all duration-300 min-w-0 flex-1 ${
+                    isActive
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  aria-label={item.desktopLabel}
+                >
+                  <span className="mb-1">{item.icon}</span>
+                  <span className="text-xs font-medium truncate">{item.mobileLabel}</span>
+                </NavLink>
+              ))}
+            </div>
+          </nav>
         </div>
       </div>
     </div>

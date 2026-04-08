@@ -151,9 +151,9 @@ export const useModelSelector = (selectedModel, onModelSelect, disabled = false)
       } else if (sortBy === 'context_length') {
         compareValue = (a.context_length || 0) - (b.context_length || 0);
       } else if (sortBy === 'name') {
-        compareValue = a.name.localeCompare(b.name);
+        compareValue = (a.name || '').localeCompare(b.name || '');
       } else if (sortBy === 'provider') {
-        compareValue = a.provider.localeCompare(b.provider);
+        compareValue = (a.provider || '').localeCompare(b.provider || '');
       }
       
       return sortOrder === 'desc' ? -compareValue : compareValue;
